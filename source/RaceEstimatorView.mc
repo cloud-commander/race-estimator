@@ -926,30 +926,33 @@ class RaceEstimatorView extends WatchUi.DataField {
       return; // Silently skip if invalid state
     }
 
-    // Arc positioning: top of display, above text rows
+    // Arc positioning: center point at top, so arc curves downward and visible
+    // This creates a semicircle that appears across the top portion of the display
     var displayWidth = dc.getWidth();
     var centerX = displayWidth / 2;
-    var centerY = 60; // Top of display, above text rows
+    var centerY = 10; // Position center ABOVE to make arc visible at top
     var radius = 50; // 100px diameter = 50px radius
     var penWidth = 10; // 10px pen width
 
-    // STEP 1: Draw background arc (full semicircle 180°→360° CLOCKWISE across TOP, dark gray)
-    // Arc geometry: 180° = 9 o'clock (left side), CLOCKWISE around top to 360°/0° = 3 o'clock (right side)
+    // STEP 1: Draw background arc (full semicircle 180°→0° CLOCKWISE, dark gray)
+    // Arc geometry: 180° = left, CLOCKWISE down and around to 0° = right
+    // With center at Y=10, this creates visible arc across top of screen
     dc.setPenWidth(penWidth);
     dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 180, 360);
+    dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 180, 0);
 
-    // STEP 2: Draw progress arc (colored, grows CLOCKWISE 180° → 180°+180°*progress = towards 360°)
+    // STEP 2: Draw progress arc (colored, grows CLOCKWISE 180° → towards 0°)
     // Progress 0.0 → endDegree=180° (start at left, empty)
-    // Progress 1.0 → endDegree=360° (finish at right, full)
-    var endDegree = 180 + (180 * mArcProgress).toNumber();
+    // Progress 1.0 → endDegree=0° (finish at right, full)
+    // Since we can't go from 180 to 0 directly (360° full circle), we calculate as 180-progress*180
+    var endDegree = 180 - (180 * mArcProgress).toNumber();
 
-    // Clamp to valid range [180, 360]
-    if (endDegree < 180) {
+    // Clamp to valid range [0, 180]
+    if (endDegree > 180) {
       endDegree = 180;
     }
-    if (endDegree > 360) {
-      endDegree = 360;
+    if (endDegree < 0) {
+      endDegree = 0;
     }
 
     dc.setColor(mArcColor, Graphics.COLOR_TRANSPARENT);
