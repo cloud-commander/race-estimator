@@ -129,6 +129,7 @@ This repository is a Connect IQ "data field" written in Monkey C targeting API 5
 - Storage: ~200 bytes used of 16KB available
 
 ## Documentation
+
 - All documentation should reside in the `docs` folder.
 
 If anything in these notes is unclear or you need CI/build commands, tell me what environment (Eclipse vs connectiq CLI) you use and I will add exact commands and examples for building and running the simulator.

@@ -57,6 +57,11 @@ class RaceEstimatorView extends WatchUi.DataField {
   private const MIN_REASONABLE_PACE = 0.05; // sec/m (20 m/s = 72 km/h, clearly wrong)
   private const MAX_TIME_SKIP_CENTISEC = 50000; // 500 seconds = ~8 min. Larger jumps allow time skipping in simulator
 
+  // Progress arc state (distance-based progress toward next milestone)
+  private var mCurrentDistance as Lang.Float = 0.0; // Current distance in meters (from Activity.Info.elapsedDistance)
+  private var mArcProgress as Lang.Float = 0.0; // Progress ratio [0.0, 1.0] cached from compute()
+  private var mArcColor as Lang.Number = Graphics.COLOR_GREEN; // Arc color cached from compute()
+
   // Layout
   private var mCenterX as Lang.Number = 0;
   private var mRow1Y as Lang.Number = 0;
@@ -363,6 +368,9 @@ class RaceEstimatorView extends WatchUi.DataField {
     // Track timer for time-skip detection in anomaly detection
     mLastValidTimer = timerTime;
 
+    // Track current distance in meters for arc progress calculation
+    mCurrentDistance = elapsedDistance;
+
     // Check milestone hits
     var needsRotation = false;
     for (var i = 0; i < DISPLAY_ROW_COUNT; i++) {
@@ -491,6 +499,11 @@ class RaceEstimatorView extends WatchUi.DataField {
       mCachedLabels[i] =
         mLabels[idx] + (mFinishTimesMs[idx] != null ? " ✓" : "");
     }
+
+    // Update arc progress and color for rendering in onUpdate()
+    mArcProgress = calculateArcProgress();
+    mArcColor = getArcColor(mArcProgress);
+
     if (mStateDirty) {
       saveToStorage();
       mStateDirty = false;
@@ -587,6 +600,8 @@ class RaceEstimatorView extends WatchUi.DataField {
     );
 
     if (isFullScreen) {
+      System.println("[RaceEst] Calling drawProgressArc");
+      drawProgressArc(dc);
       System.println("[RaceEst] Calling drawFullScreen");
       drawFullScreen(dc);
     } else {
@@ -825,6 +840,178 @@ class RaceEstimatorView extends WatchUi.DataField {
     for (var i = 0; i < DISPLAY_ROW_COUNT; i++) {
       mCachedTimes[i] = "--:--";
       mCachedLabels[i] = mLabels[i];
+    }
+  }
+
+  // ✅ PRODUCTION-SAFE: Calculate distance-based progress toward next milestone
+  // Precondition: mDisplayIndices populated, mDistancesCm valid, mCurrentDistance ≥ 0
+  // Postcondition: Returns Float in range [0.0, 1.0], no allocations
+  private function calculateArcProgress() as Lang.Float {
+    // Defensive: Array bounds checking
+    if (
+      mDisplayIndices == null ||
+      mDisplayIndices.size() == 0 ||
+      mCurrentDistance < 0
+    ) {
+      return 0.0; // Display not initialized
+    }
+
+    // Get target milestone index (first item in 3-row display)
+    var nextMilestoneIdx = mDisplayIndices[0];
+
+    // Bounds check: Ensure index is valid
+    if (nextMilestoneIdx < 0 || nextMilestoneIdx >= MILESTONE_COUNT) {
+      return 0.0; // Invalid milestone index
+    }
+
+    // Bounds check: Ensure distance array has this index
+    if (mDistancesCm == null || mDistancesCm.size() <= nextMilestoneIdx) {
+      return 0.0; // Distance array corrupted or uninitialized
+    }
+
+    // Get next milestone distance in centimeters
+    var nextMilestoneDistanceCm = mDistancesCm[nextMilestoneIdx];
+
+    // Get previous milestone distance (0 if first milestone)
+    var prevMilestoneDistanceCm = 0;
+    if (nextMilestoneIdx > 0) {
+      prevMilestoneDistanceCm = mDistancesCm[nextMilestoneIdx - 1];
+    }
+
+    // Convert current distance from meters to centimeters
+    var currentDistanceCm = (mCurrentDistance * 100.0).toNumber();
+
+    // Calculate segment size (distance between previous and next milestone)
+    var segmentDistanceCm = nextMilestoneDistanceCm - prevMilestoneDistanceCm;
+
+    // Safety: Prevent division by zero
+    if (segmentDistanceCm <= 0) {
+      return 0.0; // Malformed milestone range
+    }
+
+    // Calculate distance into current segment
+    var distanceIntoSegmentCm = currentDistanceCm - prevMilestoneDistanceCm;
+
+    // Clamp progress to [0.0, 1.0]
+    var progress =
+      distanceIntoSegmentCm.toFloat() / segmentDistanceCm.toFloat();
+    if (progress < 0.0) {
+      progress = 0.0;
+    }
+    if (progress > 1.0) {
+      progress = 1.0;
+    }
+
+    return progress;
+  }
+
+  // ✅ PRODUCTION-SAFE: Color selection for arc based on progress ratio
+  // Precondition: progress is Float in range [0.0, 1.0+]
+  // Postcondition: Returns valid Garmin color constant (never null)
+  private function getArcColor(progress as Lang.Float) as Lang.Number {
+    // Defensive: Handle invalid or null progress
+    if (progress == null || progress < 0.0) {
+      return Graphics.COLOR_GREEN; // Fallback: not started
+    }
+
+    // Color thresholds: Stepped transitions (not gradients)
+    if (progress < 0.5) {
+      return Graphics.COLOR_GREEN; // 0-50%: Good pace, plenty of time
+    } else if (progress < 0.8) {
+      return Graphics.COLOR_YELLOW; // 50-80%: Approaching finish
+    } else {
+      return Graphics.COLOR_RED; // 80%+: Close to finish or overdue
+    }
+  }
+
+  // ✅ PRODUCTION-SAFE: Draw progress arc at top of screen
+  // Precondition: dc is valid Dc; mArcProgress and mArcColor cached from compute()
+  // Postcondition: Arc drawn with start/end circles, no allocations, graceful skip on error
+  private function drawProgressArc(dc as Graphics.Dc) as Void {
+    // Defensive: Verify input validity
+    if (dc == null || mArcProgress < 0.0 || mArcProgress > 1.0) {
+      return; // Silently skip if invalid state
+    }
+
+    // Device-aware positioning
+    var displayWidth = dc.getWidth();
+    var centerX = displayWidth / 2;
+    var centerY = 60; // Safe Y position for all target devices
+
+    var radius = 50; // pixels (100px diameter semicircle)
+    var penWidth = 10; // pixels (thick stroke for visibility)
+
+    // STEP 1: Draw background arc (full semicircle, light gray)
+    // Purpose: Shows complete 180° target range to user
+    // Degrees: 270° (9 o'clock) to 450° (3 o'clock, wraps from 90°)
+    dc.setPenWidth(penWidth);
+    dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+    dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 270, 450);
+
+    // STEP 2: Draw progress arc (colored, grows left→right)
+    // Calculation: Start at 270°, progress linearly to 450° (180° total range)
+    // Formula: endDegree = 270 + (180 * progress), clamped to [270, 450]
+    var endDegree = 270 + (180 * mArcProgress).toNumber();
+    if (endDegree > 450) {
+      endDegree = 450;
+    } // Safety clamp
+    if (endDegree < 270) {
+      endDegree = 270;
+    } // Safety clamp (should not happen)
+
+    dc.setColor(mArcColor, Graphics.COLOR_TRANSPARENT);
+    dc.drawArc(
+      centerX,
+      centerY,
+      radius,
+      Graphics.ARC_CLOCKWISE,
+      270,
+      endDegree
+    );
+
+    // STEP 3: Draw endpoint circles (visual stoppers)
+    drawArcEndpoints(dc, centerX, centerY, radius, endDegree, mArcColor);
+  }
+
+  // ✅ PRODUCTION-SAFE: Draw endpoint circles for arc (trigonometry with error handling)
+  // Precondition: centerX/Y, radius, endDegree are valid numbers; dc is valid
+  // Postcondition: Two circles drawn, or silently skipped if error occurs
+  private function drawArcEndpoints(
+    dc as Graphics.Dc,
+    centerX as Lang.Number,
+    centerY as Lang.Number,
+    radius as Lang.Number,
+    endDegree as Lang.Number,
+    color as Lang.Number
+  ) as Void {
+    if (dc == null) {
+      return;
+    } // Defensive null check
+
+    try {
+      // START POINT: 270° = 9 o'clock = bottom-left
+      var startRadians = (270.0 * Math.PI) / 180.0;
+      var startX = (centerX + radius * Math.cos(startRadians)).toNumber();
+      var startY = (centerY + radius * Math.sin(startRadians)).toNumber();
+
+      // END POINT: Current progress degree
+      var endRadians = (endDegree.toFloat() * Math.PI) / 180.0;
+      var endX = (centerX + radius * Math.cos(endRadians)).toNumber();
+      var endY = (centerY + radius * Math.sin(endRadians)).toNumber();
+
+      // Circle sizing: 4px radius = 8px diameter (small but visible)
+      var circleRadius = 4;
+
+      // START CIRCLE: Always gray (static reference point)
+      dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+      dc.fillCircle(startX, startY, circleRadius);
+
+      // END CIRCLE: Colored (indicates current progress)
+      dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+      dc.fillCircle(endX, endY, circleRadius);
+    } catch (ex) {
+      // Catch-all for math/rendering errors
+      System.println("[RaceEst Arc] Endpoint error: " + ex.toString());
     }
   }
 }
