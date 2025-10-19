@@ -18,6 +18,12 @@ This repository is a Connect IQ "data field" written in Monkey C targeting API 5
 - `resources/drawables/drawables.xml` and `resources/drawables/*.png` — icons (LauncherIcon). Keep PNGs small and follow existing naming.
 - `RaceEstimator_API5_Spec.md` — complete technical specification with AMOLED strategies, performance targets, and implementation examples.
 
+## Scripts and test data
+
+- Offline analysis and validation scripts (for example `analyze_fit.py`, `analyze_gpx.py`, and `validate_fit_anomaly_detection.py`) live in the repository root. Use these to validate FIT/GPX files and to reproduce anomaly-detection test cases.
+- Example FIT/GPX files used during development are stored alongside the scripts (e.g. `19149997680_ACTIVITY.fit`, `activity_18264498522.gpx`).
+- When adding new validation scripts or sample data, place them in a `scripts/` folder at the repo root and update `README.md` to reference them.
+
 ## Architecture and important conventions
 
 - **DataField implementation**: Uses `WatchUi.DataField` (not SimpleDataField). Implements full layout control via `onLayout()` and `onUpdate()` for multi-row display.
