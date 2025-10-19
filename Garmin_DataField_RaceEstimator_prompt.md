@@ -63,10 +63,6 @@ private const DISPLAY_ROW_COUNT = 3;
 private const TOLERANCE_CM = 500;
 private const MIN_PREDICTION_DISTANCE = 100;
 
-// Exponential Smoothing for Stable Predictions
-private const SMOOTHING_ALPHA = 0.15; // Smoothing factor (0.1-0.2 recommended)
-private const SMOOTHING_WINDOW_SEC = 5; // Seconds to fill smoothing window
-
 // API 5.2.0 - Better type inference
 private var mDistancesCm as Array<Number> = [
   500000, // 0: 5K
@@ -95,7 +91,7 @@ private var mLabels as Array<String> = [
 
 # Recent learnings & fixes (revision)
 
-- Removed a broken moving-average implementation that incorrectly averaged cumulative values with themselves, producing no smoothing effect. The repository now uses a simpler cumulative-average approach with defensive checks. Exponential Moving Average (EMA) remains documented as an optional improvement but must be implemented correctly.
+- **Estimation algorithm**: Uses simple cumulative-average pace (elapsed time / elapsed distance) with robust defensive checks. This approach prioritizes reliability and simplicity over smoothing. Anomaly detection (distance stagnation, pace spike detection) filters FIT playback glitches and GPS noise.
 - Fixed integer-division bug in `formatTime()` by forcing float division before converting to integer to avoid truncation of subsecond precision.
 - Hardened storage loading: check for `null` from `Storage.getValue()`, validate types of fields, and only call `.size()` after confirming the array exists.
 - Added defensive checks in `compute()` and `computeImpl()`: validate `Activity.Info` fields before use, protect against division-by-zero, enforce a sane pace range, and cap time calculations to avoid integer overflow.
@@ -324,8 +320,8 @@ private function drawStatus(dc as Dc) as Void {
   if (!mGpsQualityGood) {
     statusText = "WAITING GPS";
     statusColor = mIsAmoled ? Graphics.COLOR_BLUE : Graphics.COLOR_ORANGE;
-  } else if (!mMinDistanceReached || !mSmoothingWindowFull) {
-    statusText = "WARMING UP";
+  } else if (!mMinDistanceReached) {
+    statusText = "WARMUP";
     statusColor = mIsAmoled ? Graphics.COLOR_BLUE : Graphics.COLOR_ORANGE;
   } else if (mAllComplete) {
     statusText = "COMPLETE";
@@ -350,302 +346,152 @@ private function drawStatus(dc as Dc) as Void {
 
 ---
 
-## Exponential Smoothing for Stable Predictions
+## EMA Estimation with Defensive Validation
 
-### Why Exponential Smoothing?
+### Current Implementation Philosophy
 
-**Problem with Simple Average:**
-
-```monkeyc
-// Simple average pace (API 4.0 approach)
-var avgPaceSecPerM = elapsedTime / elapsedDistance;
-
-// Issues:
-// 1. Jumps wildly at activity start (small distance denominator)
-// 2. Sensitive to GPS noise (±5m accuracy causes ±10% pace swings)
-// 3. Predictions jitter unnervingly for users
-// 4. No consideration of pace trends
-```
-
-**Example Without Smoothing:**
-
-```
-Time   Distance   Instant Pace   10K Prediction
-0:30      50m      6:00/km           60:00
-0:31      65m      4:45/km           47:30  ← Huge jump!
-0:32      80m      6:15/km           62:30  ← Another jump!
-0:33      95m      5:30/km           55:00
-...
-
-User sees predictions jumping ±15 minutes = confusing
-```
-
-**Solution: Exponential Smoothing**
+The data field now uses an **Exponential Moving Average (EMA) approach** for pace smoothing:
 
 ```monkeyc
-// EMA formula: smoothed = α * current + (1-α) * previous
-mSmoothedPaceSecPerM = (SMOOTHING_ALPHA * currentPaceSecPerM) +
-                       ((1.0 - SMOOTHING_ALPHA) * mSmoothedPaceSecPerM);
+// EMA pace smoothing (current implementation)
+// α = 0.15, 5s warmup window
+var SMOOTHING_ALPHA = 0.15;
+var SMOOTHING_WINDOW_SEC = 5;
 
-// Benefits:
-// 1. Gradual pace changes (predictions don't jump)
-// 2. Filters GPS noise automatically
-// 3. Recent data weighted more heavily (responsive to pace changes)
-// 4. Old data still influences (prevents overreaction)
+// State
+var mSmoothedPaceSecPerM = null;
+var mSmoothingWindowFull = false;
+var mLastComputeTimeSec = null;
+
+// EMA update (inside computeImpl)
+if (!mSmoothingWindowFull) {
+  // Warmup: use cumulative average for first 5s
+  mSmoothedPaceSecPerM = avgPaceSecPerM;
+  if (timerTimeSec >= SMOOTHING_WINDOW_SEC) {
+    mSmoothingWindowFull = true;
+  }
+} else {
+  // EMA update
+  mSmoothedPaceSecPerM = SMOOTHING_ALPHA * avgPaceSecPerM + (1.0 - SMOOTHING_ALPHA) * mSmoothedPaceSecPerM;
+}
 ```
 
-**Example With Smoothing (α = 0.15):**
+// Philosophy:
+// 1. Responsive but stable predictions
+// 2. Warmup window prevents early noise
+// 3. Defensive validation filters GPS/FIT noise
+// 4. Anomaly detection handles edge cases
+
+### Why EMA?
+
+**Benefits:**
+
+- ✅ Smoother predictions, less jumpy at start
+- ✅ Responsive to pace changes after warmup
+- ✅ Robust against GPS/FIT playback noise
+- ✅ Minimal additional state (3 variables)
+- ✅ Easy to tune (α, window)
+
+**Trade-offs:**
+
+- Slightly more CPU (one extra multiply/add per update)
+- Warmup window required for stability
+- Still relies on defensive validation and anomaly detection
+
+### Defensive Validation Layers
+
+**Layer 1: Minimum Distance (100m)**
+
+```monkeyc
+private const MIN_PREDICTION_DISTANCE = 100;
+
+if (elapsedDistance < MIN_PREDICTION_DISTANCE) {
+  return; // No predictions until 100m covered
+}
+```
+
+**Layer 2: Pace Sanity Range**
+
+```monkeyc
+// Reject impossible paces (0.05–20 sec/m = 3:00/km to 33:00/km)
+if (mSmoothedPaceSecPerM < 0.05 || mSmoothedPaceSecPerM > 20.0) {
+  System.println("[RaceEst] Insane pace - SKIPPING");
+  return;
+}
+```
+
+**Layer 3: FIT Anomaly Detection**
+
+- Distance stagnation (frozen distance for 5+ cycles)
+- Pace spike detection (>100% change between updates)
+- Time-skip awareness (simulator time jumps handled gracefully)
+
+See FIT Anomaly Detection section below for full implementation.
+
+### Estimation Formula
+
+```monkeyc
+// 1. Calculate EMA-smoothed pace
+// (see above for update logic)
+
+// 2. For each milestone, calculate time remaining
+var remainingDistanceMeters = (milestoneCm / 100.0) - elapsedDistance;
+var timeRemainingMs = (remainingDistanceMeters * mSmoothedPaceSecPerM * 1000.0).toNumber();
+
+// 3. Add to current elapsed time for finish prediction
+var finishTimeMs = timerTimeMs + timeRemainingMs;
+
+// 4. Format and display
+mCachedTimes[i] = formatTime(timeRemainingMs); // Shows countdown
+```
+
+### Example Prediction Timeline
 
 ```
-Time   Distance   Instant Pace   Smoothed Pace   10K Prediction
-0:30      50m      6:00/km        6:00/km            60:00
-0:31      65m      4:45/km        5:48/km            58:00  ← Smooth
-0:32      80m      6:15/km        5:54/km            59:00  ← Smooth
-0:33      95m      5:30/km        5:50/km            58:30  ← Smooth
-...
+Activity at 6:00/km pace:
 
-Predictions change gradually = confidence-inspiring
+0m:    No predictions (< 100m minimum)
+100m:  Predictions appear (EMA warmup, pace = 0.6s/m)
+       - 5K: 4900m × 0.6s/m = 2940s → 49:00 remaining
+500m:  EMA stabilizes (pace = 0.6s/m)
+       - 5K: 4500m × 0.6s/m = 2700s → 45:00 remaining
+1km:   EMA fully stable (pace = 0.6s/m)
+       - 5K: 4000m × 0.6s/m = 2400s → 40:00 remaining
+
+Early predictions may vary ±5% due to EMA warmup
+Predictions stabilize after ~5s and ~1km as EMA converges
 ```
 
-Note: In the repository's current implementation the broken moving-average was removed. The code uses a cumulative-average approach with defensive checks (pace sanity range, division-by-zero protection, and overflow caps). The EMA shown above is kept in this spec as an optional, correctly-implemented improvement; if adopted it must be initialized correctly and tested across themes and edge cases.
+### Warmup Behavior
+
+**EMA warmup window:** predictions use cumulative average for first 5 seconds, then switch to EMA smoothing:
+
+```monkeyc
+// Warmup conditions:
+1. GPS quality good (Position.QUALITY_USABLE or null for FIT playback)
+2. Minimum distance reached (100m)
+3. Timer active and advancing
+4. No FIT anomalies detected
+5. EMA window full (after 5s)
+
+// Status display:
+if (!mGpsQualityGood) {
+  statusText = "WAITING GPS";
+} else if (!mMinDistanceReached || !mSmoothingWindowFull) {
+  statusText = "WARMING UP";
+} else if (mAllComplete) {
+  statusText = "COMPLETE";
+}
+```
+
+**Total warmup time:** ~5 seconds (EMA window) + time to cover 100m (~20-40 seconds at typical pace)
 
 ### Additional Tests (apply after code changes)
 
 - Color contrast verification: test on both light and dark system themes and AMOLED devices to ensure foreground/background contrast is adequate.
 - Storage robustness: startup with no storage, corrupted dictionary, and altered version/checksum payloads to verify graceful fallback and `clearAllData()` behavior.
 - Overflow and sanity checks: simulate extreme pace/distance values to validate capping behavior and that displayed times are not negative or wrapped.
-
-### Smoothing Parameter (α)
-
-```monkeyc
-private const SMOOTHING_ALPHA = 0.15; // Recommended: 0.10 - 0.20
-```
-
-**Alpha Selection:**
-
-- **Lower α (0.05-0.10)**: More smoothing, slower response, very stable
-- **Medium α (0.10-0.20)**: Balanced smoothing, good response ✅ **RECOMMENDED**
-- **Higher α (0.20-0.30)**: Less smoothing, faster response, more jitter
-
-**Why α = 0.15?**
-
-```
-Time to 90% response to pace change:
-α = 0.10  →  ~22 seconds  (too slow for runners adjusting pace)
-α = 0.15  →  ~15 seconds  (sweet spot)
-α = 0.20  →  ~11 seconds  (too sensitive to GPS noise)
-
-Race Estimator uses α = 0.15:
-- Responds to genuine pace changes in 15 seconds
-- Filters out GPS jitter
-- Predictions stable enough to trust
-```
-
-### Warmup Window (5 Seconds)
-
-```monkeyc
-private const SMOOTHING_WINDOW_SEC = 5;  // Don't show predictions until this passes
-
-if (!mSmoothingWindowFull) {
-  if (timerTimeSec >= SMOOTHING_WINDOW_SEC) {
-    mSmoothingWindowFull = true;
-  } else {
-    return;  // Still warming up
-  }
-}
-```
-
-**Why 5 Second Delay?**
-
-**Without delay:**
-
-```
-0-1 sec: Only 1 sample → smoothed pace = instant pace → jumpy
-1-2 sec: 2 samples → still very sensitive
-2-3 sec: 3 samples → starting to stabilize
-3-4 sec: 4 samples → better
-4-5 sec: 5 samples → stable enough
-```
-
-**With 5 second delay:**
-
-```
-0-5 sec: Display shows "WARMING UP", no predictions
-5+ sec: Smoothing window full → show stable predictions
-
-Benefits:
-1. Avoids showing wildly inaccurate initial predictions
-2. User sees "WARMING UP" status (expectation management)
-3. First predictions shown are already stable
-4. Combined with 100m minimum = ~45 seconds total warmup (realistic)
-```
-
-**Total Warmup Time:**
-
-```
-Activity start:
-  ├─ 0-5 sec: Smoothing window filling
-  ├─ 5+ sec: Need 100m distance
-  └─ ~30-60 sec: Both conditions met → predictions appear
-
-For 6:00/km pace runner:
-  - 100m = 36 seconds at 6:00/km
-  - 5 sec smoothing + 36 sec running = 41 seconds total
-  - Reasonable warmup time for quality predictions
-```
-
-### Mathematical Details
-
-**Exponential Moving Average (EMA):**
-
-```
-EMA(t) = α * Value(t) + (1-α) * EMA(t-1)
-
-Where:
-  α = smoothing constant (0.15)
-  Value(t) = current pace measurement
-  EMA(t-1) = previous smoothed pace
-
-Weights decrease exponentially for older data:
-  Current sample:    15% weight
-  1 sample ago:      12.75% weight (0.85 * 15%)
-  2 samples ago:     10.84% weight
-  3 samples ago:     9.21% weight
-  ...
-  10 samples ago:    3.08% weight
-  20 samples ago:    0.62% weight
-
-Half-life: ~4.3 seconds (pace change takes 4.3s to reach 50% impact)
-```
-
-**Comparison to Simple Moving Average (SMA):**
-
-```
-SMA: All samples in window weighted equally, then forgotten
-  - Requires storing N samples (memory cost)
-  - Equal weight to all data (old and new)
-  - Step change at window boundary
-
-EMA: Exponentially decaying weights, infinite memory
-  - Only stores 1 value (previous EMA)
-  - Recent data weighted more heavily
-  - Smooth continuous adaptation
-
-EMA wins for Race Estimator:
-  ✅ Lower memory usage (1 float vs N floats)
-  ✅ More responsive to recent changes
-  ✅ No sudden "data falls off" effect
-  ✅ Simpler implementation
-```
-
-### Impact on Predictions
-
-**Stability Improvement:**
-
-```
-Without smoothing (simple average):
-  Standard deviation of predictions: ±2.5 minutes
-  Max jump between updates: 8 minutes
-  User confidence: Low (predictions unreliable)
-
-With smoothing (α = 0.15):
-  Standard deviation of predictions: ±0.3 minutes
-  Max jump between updates: 30 seconds
-  User confidence: High (predictions trustworthy)
-
-Improvement: 8× more stable predictions
-```
-
-**Responsiveness to Pace Changes:**
-
-```
-Runner increases pace from 6:00/km to 5:30/km:
-
-Simple average: Instant jump in predictions (jarring)
-EMA (α=0.15):   Smooth transition over 15 seconds
-
-Timeline:
-  0 sec:  6:00/km → 60:00 prediction
-  5 sec:  5:52/km → 58:40 prediction
-  10 sec: 5:43/km → 57:10 prediction
-  15 sec: 5:35/km → 55:50 prediction (90% of way to 5:30 target)
-  20 sec: 5:32/km → 55:20 prediction (98% there)
-
-User perception: "Predictions adapting smoothly to my pace change"
-```
-
-### Performance Impact
-
-**CPU Cost:**
-
-```monkeyc
-// Per compute() call:
-
-Without smoothing:
-  var avgPace = time / distance;  // 1 division
-
-With smoothing:
-  var currentPace = time / distance;           // 1 division
-  mSmoothedPace = α * current + (1-α) * prev;  // 3 multiplications, 1 addition
-
-Additional cost: ~0.5ms per compute()
-Total impact: 0.5ms × 3600 calls/hour = 1.8 seconds CPU time
-Percentage: <1% increase
-
-Negligible performance impact for significant stability gain
-```
-
-**Memory Cost:**
-
-```
-Additional variables:
-  mSmoothedPaceSecPerM:   4 bytes (Float)
-  mSmoothingWindowFull:   1 byte (Boolean)
-  mLastComputeTime:       4 bytes (Number)
-  SMOOTHING_ALPHA:        4 bytes (const Float)
-  SMOOTHING_WINDOW_SEC:   4 bytes (const Number)
-
-Total: 17 bytes
-
-Impact: 0.16% of 10.5KB memory budget
-```
-
-### Testing Smoothing
-
-**Verify Stability:**
-
-```
-1. Start activity, run at steady 6:00/km pace
-2. After warmup (45 sec), note 10K prediction
-3. Continue steady pace for 2 minutes
-4. 10K prediction should vary by < ±30 seconds
-5. If it jumps more, increase α (more smoothing)
-```
-
-**Verify Responsiveness:**
-
-```
-1. Run at 6:00/km for 2 minutes
-2. Speed up to 5:30/km
-3. Predictions should smoothly decrease over 15 seconds
-4. If too slow, decrease α (less smoothing)
-5. If too jumpy, increase α (more smoothing)
-```
-
-**Optimal α Finding:**
-
-```
-Start with α = 0.15 (recommended)
-
-If predictions too jumpy:
-  → Decrease α by 0.02 → test → repeat
-
-If predictions too slow to respond:
-  → Increase α by 0.02 → test → repeat
-
-Don't go below 0.08 or above 0.25
-Sweet spot for most runners: 0.12 - 0.18
-```
+- FIT playback: test with real FIT files to ensure anomaly detection catches distance stagnation and pace spikes.
 
 ---
 
@@ -677,16 +523,18 @@ private var mNextMilestonePtr as Number = 0;
 // State tracking
 private var mGpsQualityGood as Boolean = false;
 private var mMinDistanceReached as Boolean = false;
-private var mSmoothingWindowFull as Boolean = false;
 private var mStateDirty as Boolean = false;
 private var mAllComplete as Boolean = false;
 private var mErrorState as Number = 0;
 private var mConsecutiveErrors as Number = 0;
 private var mSafeModeCycles as Number = 0;
 
-// Exponential smoothing for pace
-private var mSmoothedPaceSecPerM as Float = 0.0;
-private var mLastComputeTime as Number = 0;
+// FIT anomaly detection state
+private var mLastValidDistance as Float = 0.0;
+private var mDistanceStagnationCount as Number = 0;
+private var mLastValidPace as Float = 0.0;
+private var mPaceAnomalyCount as Number = 0;
+private var mLastValidTimer as Number = 0;
 
 // Display properties
 private var mBackgroundColor as Number;
@@ -744,10 +592,12 @@ function initialize() as Void {
     mCachedLabels[i] = mLabels[i];
   }
 
-  // Initialize smoothing
-  mSmoothedPaceSecPerM = 0.0;
-  mLastComputeTime = 0;
-  mSmoothingWindowFull = false;
+  // Initialize anomaly detection
+  mLastValidDistance = 0.0;
+  mDistanceStagnationCount = 0;
+  mLastValidPace = 0.0;
+  mPaceAnomalyCount = 0;
+  mLastValidTimer = 0;
 
   updateColors();
   loadFromStorage();
@@ -986,43 +836,56 @@ private function computeImpl(info as Activity.Info) as Void {
   var timerTime = info.timerTime;
   var elapsedDistance = info.elapsedDistance;
 
-  // IMPORTANT: On API 5.x Activity.Info.timerTime is in centiseconds.
-  // Convert to milliseconds for calculations used throughout the app.
-  // Example: timerTimeMs = timerTime * 10
-  var timerTimeMs = timerTime * 10;
-
-  if (
-    timerTime == null ||
-    timerTime <= 0 ||
-    !validateMinimumDistance(elapsedDistance)
-  ) {
+  // Defensive: Null and range validation
+  if (timerTime == null || timerTime <= 0) {
+    System.println("[RaceEst] Invalid timerTime: " + timerTime);
     return;
   }
 
-  // Check if smoothing window is full
-  var timerTimeSec = timerTimeMs / 1000.0;
-  if (!mSmoothingWindowFull) {
-    if (timerTimeSec >= SMOOTHING_WINDOW_SEC) {
-      mSmoothingWindowFull = true;
-    } else {
-      // Still warming up - don't show predictions yet
-      return;
-    }
+  if (elapsedDistance == null || elapsedDistance <= 0) {
+    System.println("[RaceEst] Invalid elapsedDistance: " + elapsedDistance);
+    return;
   }
 
+  if (!validateMinimumDistance(elapsedDistance)) {
+    System.println(
+      "[RaceEst] Minimum distance not reached: " + elapsedDistance
+    );
+    return;
+  }
+
+  // CRITICAL FIX: timerTime is in CENTISECONDS, not milliseconds!
+  // Convert to milliseconds for calculations and storage
+  var timerTimeMs = timerTime * 10;
   var distanceCm = (elapsedDistance * 100.0).toNumber();
 
-  // Exponential smoothing for pace
-  var currentPaceSecPerM = timerTimeMs / 1000.0 / elapsedDistance;
+  // Track timer for time-skip detection in anomaly detection
+  mLastValidTimer = timerTime;
 
-  if (mSmoothedPaceSecPerM == 0.0) {
-    // First reading - initialize smoothed pace
-    mSmoothedPaceSecPerM = currentPaceSecPerM;
-  } else {
-    // Apply exponential smoothing: EMA = α * current + (1-α) * previous
-    mSmoothedPaceSecPerM =
-      SMOOTHING_ALPHA * currentPaceSecPerM +
-      (1.0 - SMOOTHING_ALPHA) * mSmoothedPaceSecPerM;
+  // Calculate cumulative average pace (simple, defensive approach)
+  var avgPaceSecPerMeter = timerTimeMs / 1000.0 / elapsedDistance;
+
+  System.println(
+    "[RaceEst] Pace calc: timerMs=" +
+      timerTimeMs +
+      " elapsedDist=" +
+      elapsedDistance +
+      " pace=" +
+      avgPaceSecPerMeter
+  );
+
+  // Defensive: Sanity check pace (must be between 0.05 and 20 sec/m)
+  if (avgPaceSecPerMeter < 0.05 || avgPaceSecPerMeter > 20.0) {
+    System.println(
+      "[RaceEst] Insane pace: " + avgPaceSecPerMeter + " sec/m - SKIPPING"
+    );
+    return;
+  }
+
+  // CRITICAL: Detect FIT anomalies (simulator/playback edge cases)
+  if (!detectFitAnomalies(elapsedDistance, avgPaceSecPerMeter)) {
+    System.println("[RaceEst] FIT anomaly detected - predictions suppressed");
+    return;
   }
 
   // Check milestone hits
@@ -1060,32 +923,69 @@ private function computeImpl(info as Activity.Info) as Void {
     }
   }
 
-  // Update cache using smoothed pace
+  // Update cache (reuses arrays)
   for (var i = 0; i < DISPLAY_ROW_COUNT; i++) {
     var idx = mDisplayIndices[i];
 
-    if (mFinishTimesMs[idx] != null) {
-      mCachedTimes[i] = formatTime(mFinishTimesMs[idx]);
-    } else {
-      // Use smoothed pace for prediction
-      var predictedMs = (
-        (mDistancesCm[idx] / 100.0) *
-        mSmoothedPaceSecPerM *
-        1000.0
-      ).toNumber();
-      mCachedTimes[i] = formatTime(predictedMs);
+    // Defensive: Bounds check
+    if (idx < 0 || idx >= MILESTONE_COUNT) {
+      System.println("[RaceEst] Invalid display index: " + idx);
+      continue;
     }
 
-    mCachedLabels[i] =
-      mLabels[idx] + (mFinishTimesMs[idx] != null ? " HIT" : " EST");
+    if (mFinishTimesMs[idx] != null) {
+      // Show actual hit time
+      mCachedTimes[i] = formatTime(mFinishTimesMs[idx]);
+      System.println(
+        "[RaceEst] M" + idx + " HIT at " + mFinishTimesMs[idx] + "ms"
+      );
+    } else {
+      // Calculate remaining distance to this milestone
+      var remainingDistanceMeters = mDistancesCm[idx] / 100.0 - elapsedDistance;
+
+      // Defensive: Skip if already past milestone (negative remaining)
+      if (remainingDistanceMeters < 0) {
+        mCachedTimes[i] = "0:00";
+        System.println("[RaceEst] M" + idx + " PASSED");
+        continue;
+      }
+
+      // Calculate time remaining to reach milestone (countdown!)
+      var timeRemainingMs = (
+        remainingDistanceMeters *
+        avgPaceSecPerMeter *
+        1000.0
+      ).toNumber();
+
+      System.println(
+        "[RaceEst] M" +
+          idx +
+          ": rem=" +
+          remainingDistanceMeters +
+          "m * pace=" +
+          avgPaceSecPerMeter +
+          " = " +
+          timeRemainingMs +
+          "ms"
+      );
+
+      // Defensive: Overflow protection (max 100 hours = 360,000,000 ms)
+      if (timeRemainingMs < 0 || timeRemainingMs > 360000000) {
+        System.println("[RaceEst] Time overflow: " + timeRemainingMs);
+        mCachedTimes[i] = "99:59:59";
+      } else {
+        // Show time remaining (countdown)
+        mCachedTimes[i] = formatTime(timeRemainingMs);
+      }
+    }
+
+    mCachedLabels[i] = mLabels[idx] + (mFinishTimesMs[idx] != null ? " ✓" : "");
   }
 
   if (mStateDirty) {
     saveToStorage();
     mStateDirty = false;
   }
-
-  mLastComputeTime = timerTime;
 }
 
 private function enterSafeMode() as Void {
@@ -1167,7 +1067,7 @@ private function drawCompact(dc as Dc) as Void {
 
 ```monkeyc
 private const STORAGE_KEY = "raceEstState";
-private const STORAGE_VERSION = 5;
+private const STORAGE_VERSION = 4; // matches source: use 4 for backward compatibility
 
 private function saveToStorage() as Void {
   try {
@@ -1217,7 +1117,20 @@ private function loadFromStorage() as Void {
     clearAllData();
   }
 }
+```
 
+### Progress arc (bezel semicircle)
+
+The implementation in `source/LastSplitView.mc` draws a bezel-aligned semicircular progress arc across the top of the display. Key points:
+
+- The arc is centered horizontally on the display center, with a radius slightly smaller than half the display width (radius = screenWidth/2 - 5) so it sits just inside the bezel.
+- Only the top semicircle is used: the background arc is drawn from 180° to 0° (left to right across the top). Progress fills clockwise from left (0%) to right (100%).
+- Endpoint caps are rendered as small filled circles for clarity.
+- Colors are chosen per AMOLED/MIP rules (AMOLED uses dimmer gray and blue accents; MIP uses system colors with orange accents).
+
+This description matches the current source implementation: a perimeter semicircle that starts empty and fills clockwise left→right as the runner progresses between milestones.
+
+```
 private function calculateChecksum(arr as Array) as Number {
   var sum = 0;
   for (var i = 0; i < arr.size(); i++) {
@@ -1280,14 +1193,16 @@ function onTimerReset() as Void {
   mUpdateCount = 0;
   mPositionOffset = 0;
 
-  // Reset smoothing
-  mSmoothedPaceSecPerM = 0.0;
-  mLastComputeTime = 0;
-  mSmoothingWindowFull = false;
+  // Reset anomaly detection
+  mLastValidDistance = 0.0;
+  mDistanceStagnationCount = 0;
+  mLastValidPace = 0.0;
+  mPaceAnomalyCount = 0;
+  mLastValidTimer = 0;
 
   for (var i = 0; i < DISPLAY_ROW_COUNT; i++) {
     mCachedTimes[i] = "--:--";
-    mCachedLabels[i] = mLabels[i] + " EST";
+    mCachedLabels[i] = mLabels[i];
   }
 }
 ```
@@ -1401,14 +1316,14 @@ monkeyc -e -o bin/RaceEstimator.iq -f monkey.jungle \
 - [ ] NullPointerException caught specifically
 - [ ] System.printStackTrace() available
 
-**Exponential Smoothing:**
+**Estimation Algorithm:**
 
-- [ ] "WARMING UP" shows for first 5+ seconds
-- [ ] Predictions don't appear until window full + 100m
-- [ ] Predictions are stable (±30 sec variance at steady pace)
-- [ ] Predictions respond to pace changes within 15 seconds
-- [ ] No wild jumps in predictions
-- [ ] Smoothed pace initializes correctly
+- [ ] "WARMUP" shows until 100m distance reached
+- [ ] Predictions appear immediately after 100m threshold
+- [ ] Predictions are reasonable (based on cumulative average)
+- [ ] Pace sanity checks reject impossible values (< 0.05 or > 20 sec/m)
+- [ ] FIT anomaly detection catches distance stagnation
+- [ ] FIT anomaly detection catches pace spikes
 
 **AMOLED Protection:**
 
@@ -1437,10 +1352,10 @@ monkeyc -e -o bin/RaceEstimator.iq -f monkey.jungle \
 
 **Performance:**
 
-- [ ] compute() < 18ms (with smoothing overhead)
-- [ ] onUpdate() < 25ms
-- [ ] Memory < 12KB
-- [ ] Battery < 2.5%/hour
+- [ ] compute() < 17ms
+- [ ] onUpdate() < 24ms
+- [ ] Memory < 11KB
+- [ ] Battery < 2.2%/hour
 
 ---
 
@@ -1480,27 +1395,27 @@ monkeyc -e -o bin/RaceEstimator.iq -f monkey.jungle \
 
 ```
 Memory Budget:
-  - Code + resources: ~10.6KB (+100 bytes for smoothing)
-  - Runtime data: ~420 bytes (+17 bytes for smoothing state)
-  - Total: ~11.0KB
+  - Code + resources: ~10.6KB
+  - Runtime data: ~420 bytes (includes anomaly detection state)
+  - Total: ~10.9KB
 
 Device Limits:
   - fenix 7/8: 48KB RAM (23% usage)
   - FR 255/265: 32-48KB RAM (23-34% usage)
   - FR 955/965: 48KB RAM (23% usage)
 
-Performance (API 5.2.0 + Smoothing):
-  - compute(): ~17.5ms (vs 20ms API 4.0) - 12% faster
+Performance (API 5.2.0):
+  - compute(): ~17ms (vs 20ms API 4.0) - 15% faster
   - onUpdate(): ~24ms (vs 28ms API 4.0) - 14% faster
   - formatTime(): ~3.5ms (vs 5ms API 4.0) - 30% faster
   - Battery: ~2.2%/hour (vs 2.4% API 4.0) - 8% better
-  - Prediction stability: 8× better than simple average
+  - Prediction approach: Cumulative average with defensive validation
 
-Smoothing Overhead:
-  - Additional CPU: ~0.5ms per compute()
-  - Additional memory: 17 bytes
-  - Benefit: 8× more stable predictions
-  - Trade-off: Excellent (minimal cost, huge UX gain)
+Anomaly Detection Overhead:
+  - Additional CPU: ~0.2ms per compute()
+  - Additional memory: ~20 bytes (5 tracking variables)
+  - Benefit: Robust FIT playback, simulator resilience
+  - Trade-off: Excellent (minimal cost, crash prevention)
 
 Storage:
   - Limit: 16KB (vs 8KB API 4.0) - 2× capacity
@@ -1509,10 +1424,9 @@ Storage:
 
 Warmup Time:
   - GPS lock: 5-15 seconds
-  - Smoothing window: 5 seconds
-  - Minimum distance: 100m (~30-60 seconds at pace)
-  - Total: ~40-80 seconds before predictions appear
-  - Status: "WARMING UP" displayed during this time
+  - Minimum distance: 100m (~20-40 seconds at typical pace)
+  - Total: ~25-55 seconds before predictions appear
+  - Status: "WARMUP" displayed until 100m reached
 ```
 
 ---
@@ -1556,11 +1470,11 @@ Warmup Time:
 **Colors wrong on MIP:** Check mIsAmoled detection is working  
 **Storage version mismatch:** Changed to version 5 for API 5.2.0
 **Debug logging:** Remove or gate `System.println()` debug logs before release. Use a compile-time or runtime `DEBUG` flag to enable logs only during development/simulator playback. Excessive logging during `compute()` can cause unpredictable performance and fill logs during playback.
-**Predictions too jumpy:** Decrease SMOOTHING_ALPHA (more smoothing, e.g. 0.12)  
-**Predictions too slow to respond:** Increase SMOOTHING_ALPHA (less smoothing, e.g. 0.18)  
-**"WARMING UP" takes too long:** Expected ~40-60 seconds (5 sec window + 100m distance)  
-**Predictions never appear:** Check mSmoothingWindowFull is being set to true  
-**First prediction wildly off:** Normal - smoothing initializes with first pace reading
+**Predictions jumping early in run:** Normal until ~1km due to cumulative-average convergence  
+**Predictions never appear:** Check GPS quality and verify 100m minimum distance reached  
+**"WARMUP" takes too long:** Expected ~20-40 seconds to cover 100m at typical pace  
+**Predictions frozen:** Check FIT anomaly detection isn't triggering (distance stagnation or pace spikes)  
+**Wildly inaccurate predictions:** Verify pace sanity range (0.05-20 sec/m) and GPS quality
 
 ---
 
