@@ -924,47 +924,39 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
   }
 
-  // ✅ PRODUCTION-SAFE: Draw progress arc as bottom half-circle spanning display
+  // ✅ PRODUCTION-SAFE: Draw progress arc per race_estimator_arc_specification.md
   // Precondition: dc is valid Dc; mArcProgress and mArcColor cached from compute()
-  // Postcondition: Arc drawn with start/end circles, no allocations, graceful skip on error
+  // Postcondition: Arc drawn at Y=60, 50px radius, 270°→450° range, no allocations
   private function drawProgressArc(dc as Graphics.Dc) as Void {
     // Defensive: Verify input validity
     if (dc == null || mArcProgress < 0.0 || mArcProgress > 1.0) {
       return; // Silently skip if invalid state
     }
 
-    // Device-aware positioning: half-circle spans horizontally from left to right
+    // Per spec: Arc positioning at top of display (Y=60), 100px diameter
     var displayWidth = dc.getWidth();
-    var displayHeight = dc.getHeight();
-
-    // Center X: horizontal middle of display
     var centerX = displayWidth / 2;
+    var centerY = 60; // Spec: Top of display, above text rows
+    var radius = 50; // Spec: 100px diameter = 50px radius
+    var penWidth = 10; // Spec: 10px pen width
 
-    // Center Y: position at horizontal midline so arc curves around bottom half
-    // This creates a semicircle from 9 o'clock (left) to 3 o'clock (right) going down
-    var centerY = displayHeight / 2;
-
-    // Radius: use half the display width so arc spans from left edge to right edge
-    var radius = displayWidth / 2;
-
-    var penWidth = 8; // pixels (visible but not too thick)
-
-    // STEP 1: Draw background arc (full bottom semicircle, light gray)
-    // Degrees: 180° (top/12 o'clock) → 0°/360° (top/12 o'clock) going clockwise = bottom half
+    // STEP 1: Draw background arc (full semicircle 270°→450°, dark gray)
+    // Arc geometry: 270° = 9 o'clock (left), 450° = 3 o'clock (right, wraps from 90°)
+    // This creates a semicircle at top curving downward left→right
     dc.setPenWidth(penWidth);
     dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 180, 0);
+    dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 270, 450);
 
-    // STEP 2: Draw progress arc (colored, grows left→right around bottom)
-    // Start: 180° (12 o'clock/top), progress clockwise to 0° (360°)
-    // Formula: endDegree = 180 - (180 * progress) gives us counterclockwise from top
-    // But we want clockwise, so: 180 + (180 * progress) wraps to negative, use modulo
-    var endDegree = 180 - (180 * mArcProgress).toNumber();
-    if (endDegree < 0) {
-      endDegree = 360 + endDegree; // Wrap negative to 360 range
+    // STEP 2: Draw progress arc (colored, grows 270° → 270°+180°*progress)
+    // Progress 0.0 → endDegree=270° (start), Progress 1.0 → endDegree=450° (end)
+    var endDegree = 270 + (180 * mArcProgress).toNumber();
+
+    // Clamp to valid range [270, 450]
+    if (endDegree < 270) {
+      endDegree = 270;
     }
-    if (endDegree > 360) {
-      endDegree = 0; // Wrap to 0 if we hit full circle
+    if (endDegree > 450) {
+      endDegree = 450;
     }
 
     dc.setColor(mArcColor, Graphics.COLOR_TRANSPARENT);
@@ -973,12 +965,12 @@ class RaceEstimatorView extends WatchUi.DataField {
       centerY,
       radius,
       Graphics.ARC_CLOCKWISE,
-      180,
+      270,
       endDegree
     );
 
-    // STEP 3: Draw endpoint circles (visual stoppers)
-    drawArcEndpoints(dc, centerX, centerY, radius, 180, endDegree, mArcColor);
+    // STEP 3: Draw endpoint circles (270° = gray start, endDegree = colored end)
+    drawArcEndpoints(dc, centerX, centerY, radius, 270, endDegree, mArcColor);
   }
 
   // ✅ PRODUCTION-SAFE: Draw endpoint circles for arc (trigonometry with error handling)
