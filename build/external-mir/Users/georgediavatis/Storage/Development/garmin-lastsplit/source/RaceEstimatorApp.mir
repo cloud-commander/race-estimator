@@ -1,0 +1,58 @@
+[ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 1; @symbol_usingdef<0> = [Toybox,1,6,12]; @symbol_usingdef<1> = [Application,1,13,24]; ]
+using Toybox.Application;
+[ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 2; @symbol_usingdef<0> = [Toybox,2,6,12]; @symbol_usingdef<1> = [WatchUi,2,13,20]; ]
+using Toybox.WatchUi;
+[ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 3; @symbol_usingdef<0> = [Toybox,3,6,12]; @symbol_usingdef<1> = [Lang,3,13,17]; ]
+using Toybox.Lang;
+[ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 5; @symbol_classdef = [RaceEstimatorApp,5,6,22]; @symbol_extends<0> = [Application,5,31,42]; @symbol_extends<1> = [AppBase,5,43,50]; ]
+class RaceEstimatorApp extends Application.AppBase {
+    [ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 5; ]
+    <init> {
+    }
+    [ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 5; ]
+    static
+    <init> {
+    }
+    [ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 6; @position = 14; @symbol_vardef = [mView,6,14,19]; @symbol_type<0> = [RaceEstimatorView,6,23,40]; ]
+    private
+    var mView as RaceEstimatorView or Null;
+    [ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 8; @symbol_functiondef = [initialize,8,11,21]; ]
+    function initialize() as Void {
+_Users_georgediavatis_Storage_Development_garmin_lastsplit_source_RaceEstimatorApp_mc_8_24_10_2_start:
+[ "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc" 9 4 ]
+        symbol [ AppBase %tmp.2 9 4 11 ];
+        %tmp.2 = getv ? :AppBase;
+        symbol [ initialize %tmp.3 9 12 22 ];
+        %tmp.3 = getv function %tmp.2 :initialize;
+        invoke %tmp.2 %tmp.3();
+_Users_georgediavatis_Storage_Development_garmin_lastsplit_source_RaceEstimatorApp_mc_8_24_10_2_stop:
+    }
+    [ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 13; @symbol_functiondef = [onStart,13,11,18]; @symbol_param<0> = [state,13,19,24]; @symbol_param<0>_type<0> = [Lang,13,28,32]; @symbol_param<0>_type<1> = [Dictionary,13,33,43]; ]
+    function onStart(state as Lang.Dictionary or Null) as Void {
+    }
+    [ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 16; @symbol_functiondef = [onStop,16,11,17]; @symbol_param<0> = [state,16,18,23]; @symbol_param<0>_type<0> = [Lang,16,27,31]; @symbol_param<0>_type<1> = [Dictionary,16,32,42]; ]
+    function onStop(state as Lang.Dictionary or Null) as Void {
+    }
+    //! Return the initial view of your application here
+    [ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 19; @symbol_functiondef = [getInitialView,19,11,25]; ]
+    function getInitialView() {
+_Users_georgediavatis_Storage_Development_garmin_lastsplit_source_RaceEstimatorApp_mc_19_28_22_2_start:
+[ "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc" 20 4 ]
+        symbol [ RaceEstimatorView %tmp.4 20 16 33 ];
+        %tmp.4 = getv ? :RaceEstimatorView;
+        %tmp.1 = newc %tmp.4 ();
+        symbol [ mView ? 20 4 9 ];
+        putv self :mView %tmp.1;
+[ "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc" 21 4 ]
+        %tmp.5 = newa 1;
+        symbol [ mView %tmp.7 21 12 17 ];
+        %tmp.7 = getv ? :mView;
+        %tmp.8 = dup %tmp.5;
+        %tmp.9 = aputv %tmp.8 0 %tmp.7;
+        ret %tmp.9;
+_Users_georgediavatis_Storage_Development_garmin_lastsplit_source_RaceEstimatorApp_mc_19_28_22_2_stop:
+    }
+}
+[ @file = "/Users/georgediavatis/Storage/Development/garmin-lastsplit/source/RaceEstimatorApp.mc"; @line = 1; ]
+<init> {
+}
