@@ -1254,6 +1254,16 @@ function onTimerReset() as Void {
 
 ## Build Setup
 
+### Developer Key Best Practice
+
+- **Never commit your developer key.**
+- Store your Connect IQ developer key at `~/.Garmin/ConnectIQ/developer_key.der` (or .pem if required).
+- Restrict permissions:
+  ```bash
+  chmod 600 ~/.Garmin/ConnectIQ/developer_key.der
+  ```
+- Add any local or test keys to `.gitignore`.
+
 ### manifest.xml
 
 ```xml
