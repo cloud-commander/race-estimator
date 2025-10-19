@@ -23,7 +23,7 @@ Race Estimator is a Garmin Connect IQ data field that predicts finish times for 
 
 ## Build from source
 
-Requires the Garmin Connect IQ SDK and your developer key:
+Requires the Garmin Connect IQ SDK and your developer key (see below):
 
 ```bash
 # Clone the repository (use the current repo URL or your fork)
@@ -37,6 +37,19 @@ monkeyc -o bin/RaceEstimator.prg -f monkey.jungle \
 # Copy to watch
 cp bin/RaceEstimator.prg /Volumes/GARMIN/GARMIN/Apps/
 ```
+
+## Developer Key (Required)
+
+- **Never commit your developer key.**
+- Store your Connect IQ developer key at `~/.Garmin/ConnectIQ/developer_key.der` (or .pem if required).
+- Restrict permissions:
+  ```bash
+  chmod 600 ~/.Garmin/ConnectIQ/developer_key.der
+  ```
+- Add any local or test keys to `.gitignore`.
+- The build commands above reference only the global key path.
+
+For CI/CD: inject the key at build time using your CI provider's secret store, and clean up after the build.
 
 ## Usage
 
