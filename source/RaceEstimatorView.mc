@@ -933,31 +933,23 @@ class RaceEstimatorView extends WatchUi.DataField {
     var radius = 50; // 100px diameter = 50px radius
     var penWidth = 10; // 10px pen width
 
-    // STEP 1: Draw background arc (full semicircle 180°→0° across TOP, dark gray)
-    // Arc geometry: 180° = 9 o'clock (left side), 0° = 3 o'clock (right side)
-    // COUNTER-CLOCKWISE so arc goes UP and across the top (not down and around bottom)
+    // STEP 1: Draw background arc (full semicircle 180°→360° CLOCKWISE across TOP, dark gray)
+    // Arc geometry: 180° = 9 o'clock (left side), CLOCKWISE around top to 360°/0° = 3 o'clock (right side)
     dc.setPenWidth(penWidth);
     dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(
-      centerX,
-      centerY,
-      radius,
-      Graphics.ARC_COUNTER_CLOCKWISE,
-      180,
-      0
-    );
+    dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 180, 360);
 
-    // STEP 2: Draw progress arc (colored, grows 180° → 180°-180°*progress = towards 0°)
+    // STEP 2: Draw progress arc (colored, grows CLOCKWISE 180° → 180°+180°*progress = towards 360°)
     // Progress 0.0 → endDegree=180° (start at left, empty)
-    // Progress 1.0 → endDegree=0° (finish at right, full)
-    var endDegree = 180 - (180 * mArcProgress).toNumber();
+    // Progress 1.0 → endDegree=360° (finish at right, full)
+    var endDegree = 180 + (180 * mArcProgress).toNumber();
 
-    // Clamp to valid range [0, 180]
-    if (endDegree > 180) {
+    // Clamp to valid range [180, 360]
+    if (endDegree < 180) {
       endDegree = 180;
     }
-    if (endDegree < 0) {
-      endDegree = 0;
+    if (endDegree > 360) {
+      endDegree = 360;
     }
 
     dc.setColor(mArcColor, Graphics.COLOR_TRANSPARENT);
@@ -965,7 +957,7 @@ class RaceEstimatorView extends WatchUi.DataField {
       centerX,
       centerY,
       radius,
-      Graphics.ARC_COUNTER_CLOCKWISE,
+      Graphics.ARC_CLOCKWISE,
       180,
       endDegree
     );
