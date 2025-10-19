@@ -53,9 +53,6 @@ class RaceEstimatorView extends WatchUi.DataField {
   private var mPaceAnomalyCount as Lang.Number = 0;
   private var mLastValidTimer as Lang.Number = 0; // Track last timer value to detect time skips
   private const FIT_STAGNATION_THRESHOLD = 5; // 5 consecutive updates without distance change
-  private const MAX_REASONABLE_PACE = 20.0; // sec/m (3 min/km minimum = fastest elite)
-  private const MIN_REASONABLE_PACE = 0.05; // sec/m (20 m/s = 72 km/h, clearly wrong)
-  private const MAX_TIME_SKIP_CENTISEC = 50000; // 500 seconds = ~8 min. Larger jumps allow time skipping in simulator
 
   // Progress arc state (distance-based progress toward next milestone)
   private var mCurrentDistance as Lang.Float = 0.0; // Current distance in meters (from Activity.Info.elapsedDistance)
@@ -848,11 +845,7 @@ class RaceEstimatorView extends WatchUi.DataField {
   // Postcondition: Returns Float in range [0.0, 1.0], no allocations
   private function calculateArcProgress() as Lang.Float {
     // Defensive: Array bounds checking
-    if (
-      mDisplayIndices == null ||
-      mDisplayIndices.size() == 0 ||
-      mCurrentDistance < 0
-    ) {
+    if (mDisplayIndices.size() == 0 || mCurrentDistance < 0) {
       return 0.0; // Display not initialized
     }
 
@@ -865,7 +858,7 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
 
     // Bounds check: Ensure distance array has this index
-    if (mDistancesCm == null || mDistancesCm.size() <= nextMilestoneIdx) {
+    if (mDistancesCm.size() <= nextMilestoneIdx) {
       return 0.0; // Distance array corrupted or uninitialized
     }
 
@@ -928,8 +921,8 @@ class RaceEstimatorView extends WatchUi.DataField {
   // Precondition: dc is valid Dc; mArcProgress and mArcColor cached from compute()
   // Postcondition: Arc drawn at Y=60, 50px radius, 270°→450° range, no allocations
   private function drawProgressArc(dc as Graphics.Dc) as Void {
-    // Defensive: Verify input validity
-    if (dc == null || mArcProgress < 0.0 || mArcProgress > 1.0) {
+    // Defensive: Verify arc progress is valid
+    if (mArcProgress < 0.0 || mArcProgress > 1.0) {
       return; // Silently skip if invalid state
     }
 
@@ -985,10 +978,6 @@ class RaceEstimatorView extends WatchUi.DataField {
     endDegree as Lang.Number,
     color as Lang.Number
   ) as Void {
-    if (dc == null) {
-      return;
-    } // Defensive null check
-
     try {
       // START POINT: Calculate from startDegree parameter
       var startRadians = (startDegree.toFloat() * Math.PI) / 180.0;
