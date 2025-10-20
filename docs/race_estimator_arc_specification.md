@@ -3,7 +3,9 @@
 **Version:** 1.0  
 **Status:** Production-Ready  
 **API Level (manifest):** 5.0.0 — recommended development SDK: 5.2.0+ (source uses modern Monkey C features)
-**Target Devices:** Fenix 7/7S/7X, Fenix 8, FR 255/255S/265/265S, FR 955, FR 965
+**Target Devices:** Fenix 7 series (fenix7, fenix7s, fenix7x, fenix7pro, fenix7spro, fenix7xpro),
+Fenix 8 family (fenix843mm, fenix847mm, fenix8pro47mm, fenix8solar47mm, fenix8solar51mm),
+Forerunner 255 series (fr255, fr255m, fr255s), Venu 2 Plus (venu2plus) — manifest minApiLevel=5.0.0
 
 ---
 
@@ -1092,7 +1094,9 @@ This specification is **PRODUCTION-READY** when:
 - **Version:** 1.0
 - **Status:** ✅ PRODUCTION-READY
 - **API Level (manifest):** 5.0.0 — recommended SDK: 5.2.0+
-- **Target Devices:** Fenix 7/7S/7X, Fenix 8, FR 255/255S/265/265S, FR 955, FR 965
+- **Target Devices:** Fenix 7 series (fenix7, fenix7s, fenix7x, fenix7pro, fenix7spro, fenix7xpro),
+  Fenix 8 family (fenix843mm, fenix847mm, fenix8pro47mm, fenix8solar47mm, fenix8solar51mm),
+  Forerunner 255 series (fr255, fr255m, fr255s), Venu 2 Plus (venu2plus) — manifest minApiLevel=5.0.0
 - **Memory Impact:** +32 bytes
 - **CPU Impact:** <1ms per cycle
 - **Code Lines:** ~80 (functions + error handling)
