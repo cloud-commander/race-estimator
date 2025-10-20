@@ -10,6 +10,7 @@ Race Estimator is a Garmin Connect IQ data field that predicts finish times for 
 - FIT anomaly detection (distance freeze + pace spike) and time-skip handling
 - AMOLED burn-in protection: black background, dimmed static content, subtle position shifts
 - Zero-allocation compute() hot path and defensive storage (STORAGE_VERSION = 5)
+ - Zero-allocation compute() hot path and defensive storage (STORAGE_VERSION = 4)
 
 ## Quick Install (side-load)
 
@@ -60,11 +61,16 @@ For CI/CD: inject the key at build time using your CI provider's secret store, a
 
 ## Supported Devices
 
-Manifest minApiLevel: 5.0.0 (see `manifest.xml`). Recommended development SDK: 5.2.0+. Tested builds include:
+Manifest minApiLevel: 5.0.0 (see `manifest.xml`). Recommended development SDK: 5.2.0+.
 
-- Fenix 7 series (fenix7, fenix7pro)
-- Forerunner 255S (fr255s)
-- Forerunner 265/965 (AMOLED) supported by AMOLED optimizations
+Devices declared in the manifest (explicit product ids):
+
+- Fenix 7 series: `fenix7`, `fenix7s`, `fenix7x`, `fenix7pro`, `fenix7spro`, `fenix7xpro`
+- Fenix 8 family: `fenix843mm`, `fenix847mm`, `fenix8pro47mm`, `fenix8solar47mm`, `fenix8solar51mm`
+- Forerunner 255 series: `fr255`, `fr255m`, `fr255s`
+- Venu 2 Plus: `venu2plus`
+
+Note: AMOLED-specific rendering and burn-in mitigations apply to AMOLED devices in the manifest (for example, Venu 2 Plus and some Fenix 8 Pro variants).
 
 ## Technical notes
 
@@ -77,9 +83,15 @@ Manifest minApiLevel: 5.0.0 (see `manifest.xml`). Recommended development SDK: 5
 
 ## Files of interest
 
-- `source/RaceEstimatorView.mc` — core logic, smoothing, anomaly detection, rendering
-- `source/RaceEstimatorApp.mc` — application bootstrap
-- `Garmin_DataField_RaceEstimator_prompt.md` — detailed spec and design rationale
+- `manifest.xml` — authoritative product list and minApiLevel used by the runtime
+- `source/RaceEstimatorView.mc` — core logic: smoothing, anomaly detection, rendering, storage
+- `source/RaceEstimatorApp.mc` — application bootstrap and entry point
+- `monkey.jungle` — `monkeyc` build descriptor used by the SDK/CLI
+- `resources/` — drawables and strings used by the data field
+- `docs/race_estimator_arc_specification.md` — UI/arc integration spec
+- `Garmin_DataField_RaceEstimator_prompt.md` — design notes and internal prompt/spec
+- `.github/copilot-instructions.md` — contributor-focused guidance and project notes
+- `build/` — pre-built binaries for some target devices (`RaceEstimator-fenix7.prg`, `RaceEstimator-fr255s.prg`, etc.)
 - `validate_fit_anomaly_detection.py` — validation suite (9 scenarios)
 - `SIMULATOR_TIME_SKIP_TESTING.md` and `TIME_SKIP_FIX.md` — time-skip handling docs
 
