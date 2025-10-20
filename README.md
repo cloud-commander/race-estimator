@@ -1,8 +1,20 @@
 # Race Estimator
 
-A small, battery-efficient Garmin Connect IQ data field that predicts finish times for nine running milestones in real time and displays concise milestone predictions on the watch.
+Race Estimator is a compact Garmin Connect IQ data field that predicts finish times for nine common race milestones in real time and surfaces three concise predictions on-screen. It's designed for accuracy, low CPU/battery use, and safe rendering on both MIP and AMOLED devices.
 
-This README is a practical quickstart and contributor guide. For deep technical details see the `docs/` folder and the source files referenced below.
+Why use it
+
+- Provides continuously-updating finish time estimates for milestones (5K, 10K, half, marathon, etc.) while you run.
+- Shows only the most relevant information: three milestone predictions at a time with a simple status line.
+
+Highlights — what the data field does
+
+- Inputs: GPS-derived elapsed distance and timestamps (Activity.Info), optional user profile for unit conversions.
+- Outputs: up to three milestone predictions formatted as time-to-finish (m:ss or h:mm:ss) and a short status (WAITING GPS, WARMUP, PREDICTING, FINISHED).
+- UI: compact 3-row display designed for single-field layouts; AMOLED-safe colors and periodic position shifts to reduce burn-in.
+- Behavior: predictions start after a short warmup (requires ≥100 m of distance and a smoothing window). As milestones are hit the display rotates to the next upcoming milestones.
+- Constraints: compute() is optimized to avoid dynamic allocations and run every second; avoid heavy work in onUpdate().
+- Edge cases handled: GPS accuracy checks, minimum-distance gating to avoid wildly inaccurate early predictions, FIT anomaly detection (distance stagnation and pace spikes), and time-skip mitigations.
 
 Key facts
 
