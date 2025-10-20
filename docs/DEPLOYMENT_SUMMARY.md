@@ -1,5 +1,7 @@
 # FIT Anomaly Detection - Deployment Summary
 
+NOTE: See `OVERVIEW.md` for the top-level docs index and cross-references.
+
 **Status:** ✅ **READY FOR PRODUCTION**
 
 ## Changes Made
@@ -190,7 +192,7 @@ If anomaly detection causes issues:
 **Feature:** FIT Anomaly Detection System  
 **Status:** ✅ **APPROVED FOR PRODUCTION**  
 **Date:** 2025-10-19  
-**Tested On:** fenix7, fenix7pro, fr255s (API 5.2.0+)  
+**Tested On:** fenix7, fenix7pro, fr255s (manifest minApiLevel 5.0.0; tested with SDK 5.2.0+)
 **Builds:** All successful (108 KB)  
 **Validation:** 9/9 scenarios pass  
 **Memory:** +16 bytes (negligible)  

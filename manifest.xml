@@ -3,9 +3,9 @@
 <iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
     <iq:application entry="RaceEstimatorApp" id="AD4CC585-EE98-4218-8B7A-1B2319AE5A76" launcherIcon="@Drawables.LauncherIcon" name="@Strings.AppName" type="datafield" version="1.0.0" minApiLevel="5.0.0">
         <iq:products>
-            <!-- Forerunner 255 Series (AMOLED) -->
+            <!-- Forerunner 255 Series (MIP) -->
             <!-- fenix 7 Series (MIP) -->
-            <!-- fenix 7 Pro Series (MIP/AMOLED hybrid) -->
+            <!-- fenix 7 Pro Series (MIP) -->
             <!-- fenix 8 Series (AMOLED) -->
             <!-- Venu 2 Plus (AMOLED) -->
             <iq:product id="fenix7"/>

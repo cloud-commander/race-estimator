@@ -1,6 +1,6 @@
 # Race Estimator
 
-Race Estimator is a Garmin Connect IQ data field that predicts finish times for nine running milestones in real time. The project targets API 5.2.0+ and is optimized for battery, memory, and AMOLED safety.
+Race Estimator is a Garmin Connect IQ data field that predicts finish times for nine running milestones in real time. The manifest declares minApiLevel 5.0.0, and the source uses newer Monkey C language features (nullable types, Double literals, Lang.format). Recommended development SDK: 5.2.0+ to match the language features used by the source and simplify contributor workflows. The project is optimized for battery, memory, and AMOLED safety.
 
 ## Highlights
 
@@ -60,7 +60,7 @@ For CI/CD: inject the key at build time using your CI provider's secret store, a
 
 ## Supported Devices
 
-Targets API 5.2.0+; tested builds include:
+Manifest minApiLevel: 5.0.0 (see `manifest.xml`). Recommended development SDK: 5.2.0+. Tested builds include:
 
 - Fenix 7 series (fenix7, fenix7pro)
 - Forerunner 255S (fr255s)
@@ -68,8 +68,9 @@ Targets API 5.2.0+; tested builds include:
 
 ## Technical notes
 
-- API Level: 5.2.0+
-- Storage version: `STORAGE_VERSION = 5` (breaking change vs v4)
+- Manifest minApiLevel: 5.0.0
+- Recommended development SDK: 5.2.0+ (source uses nullable and Double features)
+- Storage version in source: `STORAGE_VERSION = 4`
 - Smoothing: EMA α=0.15 (recommended)
 - Warmup: 5s smoothing window + 100m minimum distance (~40-80s before predictions)
 - Performance: compute() ≈ 17ms, onUpdate() ≈ 24ms, memory ≈ 11KB

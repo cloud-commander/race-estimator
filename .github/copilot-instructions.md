@@ -2,18 +2,18 @@
 
 # Quick instructions for AI coding agents
 
-This repository is a Connect IQ "data field" written in Monkey C targeting API 5.2.0+. The project builds a Race Estimator that predicts finish times for 9 running milestones with AMOLED burn-in protection. Use the notes below to be immediately productive when making changes.
+This repository is a Connect IQ "data field" written in Monkey C. The manifest declares `minApiLevel="5.0.0"`, but the source uses newer Monkey C language features (nullable types, Double literals, Lang.format). Recommended development SDK: 5.2.0+. The project builds a Race Estimator that predicts finish times for 9 running milestones with AMOLED burn-in protection. Use the notes below to be immediately productive when making changes.
 
 - Primary language: Monkey C (files under `source/`, `gen/` contains generated Rez/mir files).
 - Entry point: `manifest.xml` -> application `entry="RaceEstimatorApp"` which constructs `RaceEstimatorView` in `source/RaceEstimatorApp.mc` and `source/RaceEstimatorView.mc`.
-- API Level: 5.2.0+ (uses nullable syntax, Lang.format, enhanced exception handling)
+- Manifest minApiLevel: 5.0.0. Recommended development SDK: 5.2.0+ (uses nullable syntax, Lang.format, enhanced exception handling)
 - Target devices: fenix 7/7S/7X series, Forerunner 255/265/955/965 (includes AMOLED devices)
 
 ## Key files to reference when editing or adding features
 
 - `source/RaceEstimatorApp.mc` — application bootstrap; returns the initial DataField view.
 - `source/RaceEstimatorView.mc` — core logic: milestone tracking, prediction engine, GPS validation, AMOLED burn-in protection, storage persistence, and rendering. Edit here for behavior changes.
-- `manifest.xml` — Connect IQ manifest describing product targets (fenix 7+, FR 255+) and minApiLevel 5.2.0. No FitContributor permission needed.
+  -- `manifest.xml` — Connect IQ manifest describing product targets (fenix 7+, FR 255+) and minApiLevel 5.0.0. No FitContributor permission needed.
 - `resources/strings/strings.xml` — app name and label strings.
 - `resources/drawables/drawables.xml` and `resources/drawables/*.png` — icons (LauncherIcon). Keep PNGs small and follow existing naming.
 - `RaceEstimator_API5_Spec.md` — complete technical specification with AMOLED strategies, performance targets, and implementation examples.
@@ -43,7 +43,7 @@ This repository is a Connect IQ "data field" written in Monkey C targeting API 5
 - **Content dimming**: Hit milestones (static content) rendered in darker gray (`mDimmedColor`) to reduce pixel wear. Predictions (dynamic) use normal brightness.
 - **Implementation**: All rendering calls add `mPositionOffset` to Y coordinates and check `mIsAmoled` flag for color/dimming decisions.
 
-## Storage and persistence (API 5.2.0)
+## Storage and persistence (manifest min API 5.0.0)
 
 - **Storage version 4**: Uses `Storage.setValue()` with dictionary containing version, times array, pointer, and checksum.
 - **Checksum validation**: Simple sum-mod algorithm prevents corrupted data from loading.
@@ -64,7 +64,7 @@ This repository is a Connect IQ "data field" written in Monkey C targeting API 5
 - **Avoid dynamic allocations**: All arrays (`mDistancesCm`, `mLabels`, `mFinishTimesMs`, `mDisplayIndices`, `mCachedTimes`, `mCachedLabels`) are allocated once in `initialize()`. Never use `.add()` or resize arrays at runtime.
 - **compute() performance**: Called once per second by the platform. Keep logic O(DISPLAY_ROW_COUNT) = O(3). Heavy work affects battery and responsiveness.
 - **Safe mode recovery**: If exceptions occur 3+ times consecutively, `enterSafeMode()` displays "ERROR" and pauses computation for 10 cycles to prevent crash loops.
-- **Nullable types**: API 5.2.0 uses `Lang.Number?` syntax. Always null-check `info.timerTime`, `info.elapsedDistance`, `mFinishTimesMs[i]` before use.
+- **Nullable types**: The source uses nullable syntax (`Lang.Number?`) and modern language features. These are best supported when developing with SDK 5.2.0+; always null-check `info.timerTime`, `info.elapsedDistance`, `mFinishTimesMs[i]` before use.
 - **Time formatting**: Use `Lang.format()` for strings (30% faster than concatenation). Format as "m:ss" for < 1 hour, "h:mm:ss" for ≥ 1 hour.
 
 ## When editing or adding files
@@ -120,7 +120,7 @@ This repository is a Connect IQ "data field" written in Monkey C targeting API 5
 - `gen/` and `bin/` contain generated and build artifacts; don't edit them directly. Edit `source/` and `resources/*`.
 - Legacy implementation removed: historical legacy sources were removed from `source/`. Use `source/RaceEstimatorApp.mc` and `source/RaceEstimatorView.mc` for the current implementation.
 
-## Performance targets (API 5.2.0)
+## Performance targets (implementation)
 
 - Memory: ~10.9KB total (code + resources + runtime data)
 - compute(): ~17ms per call (runs every second)

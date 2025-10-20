@@ -2,3 +2,5 @@
 .vscode
 **bin
 developer_key
+developer_key.der
+*.der

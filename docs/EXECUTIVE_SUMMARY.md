@@ -5,7 +5,7 @@
 **Date:** October 19, 2025  
 **Component:** Garmin Race Estimator Data Field  
 **Feature:** FIT Anomaly Detection System  
-**Devices:** fenix7, fenix7pro, fr255s (API 5.2.0+)
+**Devices:** fenix7, fenix7pro, fr255s (manifest minApiLevel 5.0.0; tested with SDK 5.2.0+)
 
 ---
 
