@@ -1,100 +1,91 @@
 # Race Estimator
 
-Race Estimator is a Garmin Connect IQ data field that predicts finish times for nine running milestones in real time. The manifest declares minApiLevel 5.0.0, and the source uses newer Monkey C language features (nullable types, Double literals, Lang.format). Recommended development SDK: 5.2.0+ to match the language features used by the source and simplify contributor workflows. The project is optimized for battery, memory, and AMOLED safety.
+A small, battery-efficient Garmin Connect IQ data field that predicts finish times for nine running milestones in real time and displays concise milestone predictions on the watch.
 
-## Highlights
+This README is a practical quickstart and contributor guide. For deep technical details see the `docs/` folder and the source files referenced below.
 
-- Predicts 9 unified milestones: 5K, 5MI, 10K, 13.1K, 10MI, HM, 26.2K, FM, 50K
-- Shows 3 milestones at a time and rotates as you hit them
-- Exponential smoothing (EMA, α=0.15) for stable predictions
-- FIT anomaly detection (distance freeze + pace spike) and time-skip handling
-- AMOLED burn-in protection: black background, dimmed static content, subtle position shifts
-- Zero-allocation compute() hot path and defensive storage (STORAGE_VERSION = 5)
-- Zero-allocation compute() hot path and defensive storage (STORAGE_VERSION = 4)
+Key facts
 
-## Quick Install (side-load)
+- Runtime manifest minApiLevel: 5.0.0
+- Recommended development SDK: 5.2.0+ (source uses nullable types, Double literals, and modern Monkey C conveniences)
+- Storage version in source: `STORAGE_VERSION = 4`
 
-1. Build artifacts are available in the `build/` directory. Choose the binary matching your device:
+Quick start — install a prebuilt binary
 
-   - `build/RaceEstimator-fenix7.prg`
-   - `build/RaceEstimator-fenix7pro.prg`
-   - `build/RaceEstimator-fr255s.prg`
+1. Open `build/` and pick the binary that matches your device (e.g., `RaceEstimator-fenix7.prg`, `RaceEstimator-fr255s.prg`).
+2. Copy the `.prg` to your watch `GARMIN/Apps` folder (macOS: use Android File Transfer or MTP tool).
 
-2. Copy the `.prg` file to your watch `GARMIN/Apps` folder (use Android File Transfer on macOS)
+Build from source (developer)
 
-## Build from source
-
-Requires the Garmin Connect IQ SDK and your developer key (see below):
+- Requirements: Garmin Connect IQ SDK (recommended 5.2.0+), `monkeyc` CLI, and your Connect IQ developer key.
+- Example build commands (replace device id where shown):
 
 ```bash
-# Clone the repository (use the current repo URL or your fork)
-git clone https://github.com/stirnim/garmin-lastsplit.git
-cd garmin-lastsplit
-
-# Example: build for fenix7
-monkeyc -o bin/RaceEstimator.prg -f monkey.jungle \
+# Build for fenix7
+monkeyc -o bin/RaceEstimator-fenix7.prg -f monkey.jungle \
   -y ~/.Garmin/ConnectIQ/developer_key.der -d fenix7
 
-# Copy to watch
-cp bin/RaceEstimator.prg /Volumes/GARMIN/GARMIN/Apps/
+# Build for fr255s
+monkeyc -o bin/RaceEstimator-fr255s.prg -f monkey.jungle \
+  -y ~/.Garmin/ConnectIQ/developer_key.der -d fr255s
+
+# Build for venu2plus
+monkeyc -o bin/RaceEstimator-venu2plus.prg -f monkey.jungle \
+  -y ~/.Garmin/ConnectIQ/developer_key.der -d venu2plus
 ```
 
-## Developer Key (Required)
+Developer key (important)
 
-- **Never commit your developer key.**
-- Store your Connect IQ developer key at `~/.Garmin/ConnectIQ/developer_key.der` (or .pem if required).
-- Restrict permissions:
-  ```bash
-  chmod 600 ~/.Garmin/ConnectIQ/developer_key.der
-  ```
-- Add any local or test keys to `.gitignore`.
-- The build commands above reference only the global key path.
+- Never commit your developer key.
+- Recommended location: `~/.Garmin/ConnectIQ/developer_key.der` (the `-y` flag accepts a path).
+- Secure the key: `chmod 600 ~/.Garmin/ConnectIQ/developer_key.der`
+- For CI: store the DER file as a secret and write it into `~/.Garmin/ConnectIQ/` during the job, then remove it.
 
-For CI/CD: inject the key at build time using your CI provider's secret store, and clean up after the build.
+Usage (on the watch)
 
-## Usage
+1. Add the "Race Estimator" data field to a running activity screen.
+2. Use a 1-field or compact layout for best visibility.
+3. Wait for GPS lock; the data field requires ≥100 m of recorded distance and a short smoothing window before stable predictions appear.
 
-1. Add the "Race Estimator" data field to a running activity screen
-2. Use a 1-field layout for best visibility
-3. Wait for GPS lock (status: "WAITING GPS") and run ≥100m (status: "WARMUP")
-4. Predictions appear once the smoothing window (5s) and minimum distance (100m) are met
+Supported / tested targets
 
-## Supported Devices
+- See `manifest.xml` for the authoritative product list. Common targets used during development and testing include:
+  - Fenix 7 family (fenix7, fenix7pro, fenix7s, fenix7x, ...)
+  - Fenix 8 family (selected Pro/solar variants)
+  - Forerunner 255 series (fr255, fr255m, fr255s)
+  - Venu 2 Plus (AMOLED)
 
-Manifest minApiLevel: 5.0.0 (see `manifest.xml`). Recommended development SDK: 5.2.0+.
+Why 5.2.0+ as recommended SDK?
 
-Devices declared in the manifest (explicit product ids):
+- The project uses modern Monkey C features (nullable types, Double literals, Lang.format) that are more ergonomic on SDK 5.2.0+. The manifest minApiLevel remains 5.0.0 so runtime compatibility is preserved.
 
-- Fenix 7 series: `fenix7`, `fenix7s`, `fenix7x`, `fenix7pro`, `fenix7spro`, `fenix7xpro`
-- Fenix 8 family: `fenix843mm`, `fenix847mm`, `fenix8pro47mm`, `fenix8solar47mm`, `fenix8solar51mm`
-- Forerunner 255 series: `fr255`, `fr255m`, `fr255s`
-- Venu 2 Plus: `venu2plus`
+Troubleshooting
 
-Note: AMOLED-specific rendering and burn-in mitigations apply to AMOLED devices in the manifest (for example, Venu 2 Plus and some Fenix 8 Pro variants).
+- "Unable to load private key: ${workspaceFolder}/developer_key": make sure `monkeyC.developerKeyPath` in your editor points to `~/.Garmin/ConnectIQ/developer_key.der` or pass `-y <path>` to `monkeyc`.
+- Permission denied reading the key: ensure `chmod 600` is set and the file is readable by you.
+- Build fails for a device: verify the device id passed to `-d` matches an id in `manifest.xml` or change the target in `monkey.jungle`.
+- Simulator logs: use `System.println("[RaceEst] ...")` in source to print messages in the simulator/IDE console.
 
-## Technical notes
+Where to look next (short)
 
-- Manifest minApiLevel: 5.0.0
-- Recommended development SDK: 5.2.0+ (source uses nullable and Double features)
-- Storage version in source: `STORAGE_VERSION = 4`
-- Smoothing: EMA α=0.15 (recommended)
-- Warmup: 5s smoothing window + 100m minimum distance (~40-80s before predictions)
-- Performance: compute() ≈ 17ms, onUpdate() ≈ 24ms, memory ≈ 11KB
+- Core logic and behavior: `source/RaceEstimatorView.mc`
+- App bootstrap: `source/RaceEstimatorApp.mc`
+- Runtime targets and minApiLevel: `manifest.xml`
+- UI/arc design: `docs/race_estimator_arc_specification.md`
 
-## Testing & Validation
+Testing & validation
 
-- 9/9 validation scenarios passing (normal GPS, FIT freeze, pace spikes, mixed anomalies)
-- Real activity validated: `activity_18264498522.csv` (28.01 km, 3:14:30)
+- The project includes validation scripts under `scripts/` (FIT/GPX analysis) and some prebuilt test binaries under `build/`.
 
-## Contributing
+Contributing (quick rules)
 
-Please follow project conventions:
+- Avoid allocations in `compute()` and other hot paths.
+- Gate debug logs behind a `DEBUG` flag.
+- Test on both MIP and AMOLED devices when changing rendering.
+- Bump `STORAGE_VERSION` when you change persistent storage layout and include a migration plan.
 
-1. Avoid dynamic allocations in `compute()` and `onUpdate()`
-2. Gate debug `System.println()` logs behind a `DEBUG` flag
-3. Test changes on both MIP and AMOLED devices
-4. Keep `STORAGE_VERSION` in sync when changing storage schema
+License
 
-## License
+- This project is licensed under the MIT License — see `LICENSE`.
 
-See `LICENSE` for details.
+If you'd like, I can also add a short CONTRIBUTING.md and a CI build example that injects the developer key from secrets.
