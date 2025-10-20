@@ -10,7 +10,7 @@ Race Estimator is a Garmin Connect IQ data field that predicts finish times for 
 - FIT anomaly detection (distance freeze + pace spike) and time-skip handling
 - AMOLED burn-in protection: black background, dimmed static content, subtle position shifts
 - Zero-allocation compute() hot path and defensive storage (STORAGE_VERSION = 5)
- - Zero-allocation compute() hot path and defensive storage (STORAGE_VERSION = 4)
+- Zero-allocation compute() hot path and defensive storage (STORAGE_VERSION = 4)
 
 ## Quick Install (side-load)
 
@@ -80,20 +80,6 @@ Note: AMOLED-specific rendering and burn-in mitigations apply to AMOLED devices 
 - Smoothing: EMA α=0.15 (recommended)
 - Warmup: 5s smoothing window + 100m minimum distance (~40-80s before predictions)
 - Performance: compute() ≈ 17ms, onUpdate() ≈ 24ms, memory ≈ 11KB
-
-## Files of interest
-
-- `manifest.xml` — authoritative product list and minApiLevel used by the runtime
-- `source/RaceEstimatorView.mc` — core logic: smoothing, anomaly detection, rendering, storage
-- `source/RaceEstimatorApp.mc` — application bootstrap and entry point
-- `monkey.jungle` — `monkeyc` build descriptor used by the SDK/CLI
-- `resources/` — drawables and strings used by the data field
-- `docs/race_estimator_arc_specification.md` — UI/arc integration spec
-- `Garmin_DataField_RaceEstimator_prompt.md` — design notes and internal prompt/spec
-- `.github/copilot-instructions.md` — contributor-focused guidance and project notes
-- `build/` — pre-built binaries for some target devices (`RaceEstimator-fenix7.prg`, `RaceEstimator-fr255s.prg`, etc.)
-- `validate_fit_anomaly_detection.py` — validation suite (9 scenarios)
-- `SIMULATOR_TIME_SKIP_TESTING.md` and `TIME_SKIP_FIX.md` — time-skip handling docs
 
 ## Testing & Validation
 
