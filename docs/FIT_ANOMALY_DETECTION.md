@@ -1,3 +1,5 @@
+NOTE: This document is part of the Race Estimator docs set. See `OVERVIEW.md` for a guided index of documents.
+
 # FIT Anomaly Detection System
 
 ## Overview
@@ -256,7 +258,7 @@ All debug statements include `[RaceEst]` prefix for grep filtering.
 
 ## References
 
-- **Garmin Connect IQ SDK:** API 5.2.0+
+- **Garmin Connect IQ SDK (note):** manifest minApiLevel is 5.0.0; recommended development SDK is 5.2.0+ (source uses nullable types and modern features)
 - **Activity.Info:** `timerTime` (centiseconds), `elapsedDistance` (meters)
 - **Position.QUALITY_USABLE:** GPS accuracy threshold (3)
 - **FIT File Format:** https://developer.garmin.com/fit/overview/

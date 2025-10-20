@@ -470,7 +470,7 @@ Estimator project (Garmin Connect IQ Terms). No attribution required, but apprec
 **Pattern Version:** 1.0  
 **Date:** 2025-10-19  
 **Status:** ✅ Production  
-**Tested On:** fenix7, fenix7pro, fr255s (API 5.2.0+)  
+**Tested On:** fenix7, fenix7pro, fr255s (manifest minApiLevel 5.0.0; tested with SDK 5.2.0+)
 **Maintainer:** Garmin Monkey C Community
 
 ---

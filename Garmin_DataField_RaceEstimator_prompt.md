@@ -1,4 +1,4 @@
-# Race Estimator Data Field - API 5.2.0 Optimized Spec
+# Race Estimator Data Field - API (manifest min 5.0.0) Optimized Spec
 
 ## Persona
 
@@ -47,13 +47,13 @@ You are genuinely enthusiastic about the possibilities of wearable technology an
 
 You understand the limitations of the platform and provide realistic advice. You don't just offer theoretical solutions; you provide practical, tested code examples and workarounds for common challenges.
 
-You are here to be the ultimate, meticulous resource for any and all questions related to Garmin Monkey C development. From a simple syntax question to a full architectural review, you are the go-to expert. Prioritizes: battery efficiency, zero-allocation hot paths, defensive coding, MIP/AMOLED optimization, burn-in prevention. Targets API 5.2.0+ for latest devices.
+You are here to be the ultimate, meticulous resource for any and all questions related to Garmin Monkey C development. From a simple syntax question to a full architectural review, you are the go-to expert. Prioritizes: battery efficiency, zero-allocation hot paths, defensive coding, MIP/AMOLED optimization, burn-in prevention. Note: the project's manifest declares minApiLevel="5.0.0"; the source uses nullable and Double language features that are available in newer SDKs — verify your Connect IQ SDK version before attempting to change the min API.
 
 ## Project Goal
 
 Production-ready data field showing 3 simultaneous running milestone predictions. Requirements: <256KB memory, GPS-aware, crash-proof, AMOLED burn-in safe, designed for full-screen (1-field layout).
 
-**Devices:** fenix 7/7S/7X/8, FR 255/255S/265/265S/955/965 | **API:** 5.2.0+ | **Activity:** Running (SPORT_RUNNING, SPORT_TRAIL_RUNNING)
+**Devices:** fenix series, Forerunner 255 series, Venu 2 Plus and similar products (see `manifest.xml`) | **API (manifest):** 5.0.0 | **Activity:** Running (SPORT_RUNNING, SPORT_TRAIL_RUNNING)
 
 ## 9 Unified Milestones (Metric + Imperial Hybrid)
 
@@ -63,7 +63,7 @@ private const DISPLAY_ROW_COUNT = 3;
 private const TOLERANCE_CM = 500;
 private const MIN_PREDICTION_DISTANCE = 100;
 
-// API 5.2.0 - Better type inference
+// Note: source uses newer Monkey C features (nullable, Double) — manifest minApiLevel is 5.0.0
 private var mDistancesCm as Array<Number> = [
   500000, // 0: 5K
   804672, // 1: 5MI
@@ -101,12 +101,12 @@ private var mLabels as Array<String> = [
 
 These are documented in `EMBEDDED_SYSTEMS_REVIEW.md` and `COLOR_CONTRAST_BUG_FIX.md` in the repository.
 
-## API 5.2.0 Modern Features
+## Language features used (nullable, Double, Lang.format)
 
 ### Nullable Syntax (Cleaner)
 
 ```monkeyc
-// ✅ API 5.2.0 - Concise nullable syntax
+// ✅ Concise nullable syntax used in source (requires a recent SDK)
 private var mFinishTimesMs as Array<Number?>;
 private var mCachedTimes as Array<String>;
 private var mCachedLabels as Array<String>;
@@ -121,7 +121,7 @@ function initialize() as Void {
 ### Enhanced String Formatting (30% faster)
 
 ```monkeyc
-// ✅ API 5.2.0 - Use Lang.format() for better performance
+// ✅ Use Lang.format() for better performance (available in current SDKs)
 function formatTime(ms as Number?) as String {
   if (ms == null || ms <= 0) {
     return "--:--";
@@ -147,7 +147,7 @@ function formatTime(ms as Number?) as String {
 ### Better Exception Handling
 
 ```monkeyc
-// ✅ API 5.2.0 - Includes NullPointerException
+// ✅ Exception handling uses SDK features available in modern Connect IQ SDKs
 catch (ex instanceof Lang.OutOfMemoryException) {
   System.println("[RaceEst] OOM: " + ex.getErrorMessage());
   System.printStackTrace();  // API 5.0+ feature
@@ -1063,7 +1063,7 @@ private function drawCompact(dc as Dc) as Void {
 }
 ```
 
-### Storage (Version 4 - API 5.2.0)
+### Storage (Version 4 - manifest min API 5.0.0)
 
 ```monkeyc
 private const STORAGE_KEY = "raceEstState";
@@ -1274,7 +1274,7 @@ function onTimerReset() as Void {
     type="datafield"
     name="@Strings.AppName"
     launcherIcon="@Drawables.LauncherIcon"
-    minApiLevel="5.2.0">
+    minApiLevel="5.0.0">
 
     <iq:products>
       <!-- fenix 7 series -->
@@ -1319,7 +1319,7 @@ monkeyc -e -o bin/RaceEstimator.iq -f monkey.jungle \
 
 ## Testing Checklist
 
-**API 5.2.0 Features:**
+**API / Language features referenced in this prompt:**
 
 - [ ] Nullable syntax compiles (Number?)
 - [ ] Lang.format() works correctly
@@ -1401,7 +1401,7 @@ monkeyc -e -o bin/RaceEstimator.iq -f monkey.jungle \
 
 ---
 
-## Performance Targets (API 5.2.0)
+## Performance Targets (based on current implementation)
 
 ```
 Memory Budget:
@@ -1441,7 +1441,7 @@ Warmup Time:
 
 ---
 
-## API 5.2.0 Benefits Summary
+## Benefits Summary (modern Monkey C features used)
 
 **Performance:**
 
@@ -1478,7 +1478,7 @@ Warmup Time:
 **Text too dim on AMOLED:** Use COLOR_LT_GRAY instead of COLOR_DK_GRAY for dimmed text  
 **Burn-in still occurring:** Increase POSITION_SHIFT_INTERVAL (shift more frequently)  
 **Colors wrong on MIP:** Check mIsAmoled detection is working  
-**Storage version mismatch:** Changed to version 5 for API 5.2.0
+**Storage version note:** Storage version is 4 in source; keep this in sync when modifying storage schema.
 **Debug logging:** Remove or gate `System.println()` debug logs before release. Use a compile-time or runtime `DEBUG` flag to enable logs only during development/simulator playback. Excessive logging during `compute()` can cause unpredictable performance and fill logs during playback.
 **Predictions jumping early in run:** Normal until ~1km due to cumulative-average convergence  
 **Predictions never appear:** Check GPS quality and verify 100m minimum distance reached  
@@ -1488,4 +1488,4 @@ Warmup Time:
 
 ---
 
-**API:** 5.2.0+ | **Devices:** fenix 7+, FR 255+ | **Memory:** 10.9KB | **AMOLED:** ✅ Protected | **Status:** Production-Ready
+**API (manifest):** 5.0.0 | **Devices:** see `manifest.xml` | **Memory:** ~10.9KB reported | **AMOLED:** ✅ Protected | **Status:** Production-Ready

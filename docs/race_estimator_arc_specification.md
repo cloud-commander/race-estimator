@@ -2,8 +2,8 @@
 
 **Version:** 1.0  
 **Status:** Production-Ready  
-**API Level:** 5.2.0+  
-**Target Devices:** Fenix 7/7S/7X, Fenix 8, FR 255/255S/265/265S, FR 955, FR 965  
+**API Level (manifest):** 5.0.0 — recommended development SDK: 5.2.0+ (source uses modern Monkey C features)
+**Target Devices:** Fenix 7/7S/7X, Fenix 8, FR 255/255S/265/265S, FR 955, FR 965
 
 ---
 
@@ -26,6 +26,7 @@ This specification extends the existing **Race Estimator Data Field** with a **d
 ### Integration Summary
 
 The arc integrates with existing systems:
+
 - **Milestones:** Reuses `mDistancesCm` array + `mDisplayIndices` tracking
 - **Distance:** Reuses `Activity.Info.elapsedDistance` (meters, converted to cm)
 - **Rendering:** Draws before `drawFullScreen()` in full-screen mode
@@ -36,10 +37,10 @@ The arc integrates with existing systems:
 
 ## CONTEXT
 
-This specification extends existing **Race Estimator Data Field** (API 5.2.0) with a **dynamic half-circle progress arc** that visualizes running progress toward the next milestone. The arc uses the existing milestone system, exponential smoothing pace calculation, and AMOLED-safe rendering.
+This specification extends existing **Race Estimator Data Field** (manifest minApiLevel 5.0.0; recommended SDK 5.2.0+) with a **dynamic half-circle progress arc** that visualizes running progress toward the next milestone. The arc uses the existing milestone system, exponential smoothing pace calculation, and AMOLED-safe rendering.
 
 **Memory Budget:** +32 bytes (total: ~11.2KB, within <256KB target)  
-**AMOLED Compatible:** Yes (existing burn-in mitigation applies)  
+**AMOLED Compatible:** Yes (existing burn-in mitigation applies)
 
 ---
 
@@ -52,23 +53,24 @@ Arc tracks progress toward the **next incomplete milestone** using your existing
 ```monkeyc
 // From existing code - DO NOT CHANGE
 private var mDistancesCm as Array<Number> = [
-  500000,    // 0: 5K
-  804672,    // 1: 5MI
-  1000000,   // 2: 10K
-  1310000,   // 3: 13.1K
-  1609344,   // 4: 10MI
-  2109750,   // 5: HM
-  2620000,   // 6: 26.2K
-  4219500,   // 7: FM
-  5000000    // 8: 50K
+  500000, // 0: 5K
+  804672, // 1: 5MI
+  1000000, // 2: 10K
+  1310000, // 3: 13.1K
+  1609344, // 4: 10MI
+  2109750, // 5: HM
+  2620000, // 6: 26.2K
+  4219500, // 7: FM
+  5000000, // 8: 50K
 ];
 
-private var mDisplayIndices as Array<Number>;      // Your 3-row display tracker
-private var mFinishTimesMs as Array<Number?>;      // Your milestone hit times
-private var mNextMilestonePtr as Number;           // Your rotation pointer
+private var mDisplayIndices as Array<Number>; // Your 3-row display tracker
+private var mFinishTimesMs as Array<Number?>; // Your milestone hit times
+private var mNextMilestonePtr as Number; // Your rotation pointer
 ```
 
 **Arc Behavior:**
+
 - Arc always shows progress to the **FIRST UNCOMPLETED milestone** (mDisplayIndices[0])
 - When user reaches that milestone: arc resets, mDisplayIndices rotates, arc now tracks next milestone
 - When all milestones complete: arc caps at 100% (450°), stays red
@@ -83,13 +85,13 @@ Arc uses your **exact same unit system**:
 // From existing computeImpl()
 
 // CRITICAL: Activity.Info.timerTime is in CENTISECONDS (API 5.x)
-var timerTimeMs = info.timerTime * 10;  // Convert to milliseconds ✓
+var timerTimeMs = info.timerTime * 10; // Convert to milliseconds ✓
 
 // Activity.Info.elapsedDistance is in METERS
-var distanceCm = (info.elapsedDistance * 100.0).toNumber();  // Convert to cm ✓
+var distanceCm = (info.elapsedDistance * 100.0).toNumber(); // Convert to cm ✓
 
 // Your distance array is in CENTIMETERS
-var nextMilestoneDistanceCm = mDistancesCm[mDisplayIndices[0]];  // Already cm ✓
+var nextMilestoneDistanceCm = mDistancesCm[mDisplayIndices[0]]; // Already cm ✓
 ```
 
 **Arc Calculation (Reuses Your Units):**
@@ -97,27 +99,36 @@ var nextMilestoneDistanceCm = mDistancesCm[mDisplayIndices[0]];  // Already cm �
 ```monkeyc
 // Progress toward next milestone (uses your existing distance arrays)
 function calculateArcProgress() as Float {
-  if (mDisplayIndices.size() == 0) { return 0.0; }
-  
-  var nextMilestoneIdx = mDisplayIndices[0];  // First item in display
+  if (mDisplayIndices.size() == 0) {
+    return 0.0;
+  }
+
+  var nextMilestoneIdx = mDisplayIndices[0]; // First item in display
   var nextMilestoneDistanceCm = mDistancesCm[nextMilestoneIdx];
-  
+
   // Current distance from your computeImpl()
-  var currentDistanceCm = (mCurrentDistance * 100.0).toNumber();  // Use your existing distance
-  
+  var currentDistanceCm = (mCurrentDistance * 100.0).toNumber(); // Use your existing distance
+
   // Previous milestone (0 if first milestone)
-  var prevMilestoneDistanceCm = (nextMilestoneIdx > 0) ? mDistancesCm[nextMilestoneIdx - 1] : 0;
-  
+  var prevMilestoneDistanceCm =
+    nextMilestoneIdx > 0 ? mDistancesCm[nextMilestoneIdx - 1] : 0;
+
   var segmentDistanceCm = nextMilestoneDistanceCm - prevMilestoneDistanceCm;
-  if (segmentDistanceCm <= 0) { return 0.0; }
-  
+  if (segmentDistanceCm <= 0) {
+    return 0.0;
+  }
+
   var distanceIntoSegmentCm = currentDistanceCm - prevMilestoneDistanceCm;
-  
+
   // Clamp to 0.0-1.0
   var progress = distanceIntoSegmentCm.toFloat() / segmentDistanceCm.toFloat();
-  if (progress < 0.0) { progress = 0.0; }
-  if (progress > 1.0) { progress = 1.0; }
-  
+  if (progress < 0.0) {
+    progress = 0.0;
+  }
+  if (progress > 1.0) {
+    progress = 1.0;
+  }
+
   return progress;
 }
 ```
@@ -160,10 +171,16 @@ function drawFullScreen(dc as Dc) as Void {
   for (var i = 0; i < DISPLAY_ROW_COUNT; i++) {
     var idx = mDisplayIndices[i];
     var yPos = getYPosition(i) + mPositionOffset;
-    
+
     dc.setColor(mForegroundColor, Graphics.COLOR_TRANSPARENT);
     var text = mCachedLabels[i] + "  " + mCachedTimes[i];
-    dc.drawText(mCenterX, yPos, Graphics.FONT_MEDIUM, text, Graphics.TEXT_JUSTIFY_CENTER);
+    dc.drawText(
+      mCenterX,
+      yPos,
+      Graphics.FONT_MEDIUM,
+      text,
+      Graphics.TEXT_JUSTIFY_CENTER
+    );
   }
 }
 ```
@@ -177,42 +194,46 @@ function drawFullScreen(dc as Dc) as Void {
 private function drawProgressArc(dc as Dc) as Void {
   // ✅ PRODUCTION CHECK: Verify input validity
   if (dc == null || mArcProgress < 0.0 || mArcProgress > 1.0) {
-    return;  // Silently skip if invalid state
+    return; // Silently skip if invalid state
   }
-  
+
   // ✅ DEVICE-AWARE: Calculate positioning based on display dimensions
   var displayWidth = dc.getWidth();
   var displayHeight = dc.getHeight();
-  
+
   // Arc center X (always horizontal center)
   var centerX = displayWidth / 2;
-  
+
   // Arc center Y: Position in upper portion (Y=60 safe for all target devices)
   // Fenix 7/8 (454px): Y=60 leaves 394px for below content
   // FR 255S (312px): Y=60 leaves 252px for below content
   // All have sufficient space without overlap
   var centerY = 60;
-  
-  var radius = 50;      // pixels (100px diameter semicircle)
-  var penWidth = 10;    // pixels (thick stroke for visibility)
-  
+
+  var radius = 50; // pixels (100px diameter semicircle)
+  var penWidth = 10; // pixels (thick stroke for visibility)
+
   // ✅ STEP 1: Draw background arc (full semicircle, light gray)
   // Purpose: Shows complete 180° target range to user
   // Degrees: 270° (9 o'clock) to 450° (3 o'clock, wraps from 90°)
   dc.setPenWidth(penWidth);
   dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
   dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 270, 450);
-  
+
   // ✅ STEP 2: Draw progress arc (colored, grows left→right)
   // Calculation: Start at 270°, progress linearly to 450° (180° total range)
   // Formula: endDegree = 270 + (180 * progress), clamped to [270, 450]
   var endDegree = 270 + (180 * mArcProgress).toNumber();
-  if (endDegree > 450) { endDegree = 450; }  // Safety clamp
-  if (endDegree < 270) { endDegree = 270; }  // Safety clamp (should not happen)
-  
+  if (endDegree > 450) {
+    endDegree = 450;
+  } // Safety clamp
+  if (endDegree < 270) {
+    endDegree = 270;
+  } // Safety clamp (should not happen)
+
   dc.setColor(mArcColor, Graphics.COLOR_TRANSPARENT);
   dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 270, endDegree);
-  
+
   // ✅ STEP 3: Draw endpoint circles (visual stoppers)
   // Adds visual clarity: start point (gray, static) + end point (colored, moving)
   drawArcEndpoints(dc, centerX, centerY, radius, endDegree, mArcColor);
@@ -229,34 +250,34 @@ private function drawArcEndpoints(
   endDegree as Number,
   color as Number
 ) as Void {
-  
-  if (dc == null) { return; }  // Defensive null check
-  
+  if (dc == null) {
+    return;
+  } // Defensive null check
+
   try {
-    // ✅ TRIGONOMETRY SAFETY: Use Math.toRadians() (API 5.2.0+)
+    // ✅ TRIGONOMETRY SAFETY: Use Math.toRadians() (requires a modern SDK; recommended 5.2.0+)
     // This is more reliable than manual π multiplication
-    
+
     // START POINT: 270° = 9 o'clock = bottom-left
     var startRadians = Math.toRadians(270);
     var startX = centerX + (radius * Math.cos(startRadians)).toNumber();
     var startY = centerY + (radius * Math.sin(startRadians)).toNumber();
-    
+
     // END POINT: Current progress degree
     var endRadians = Math.toRadians(endDegree);
     var endX = centerX + (radius * Math.cos(endRadians)).toNumber();
     var endY = centerY + (radius * Math.sin(endRadians)).toNumber();
-    
+
     // ✅ CIRCLE SIZING: 4px radius = 8px diameter (small but visible)
     var circleRadius = 4;
-    
+
     // START CIRCLE: Always gray (static reference point)
     dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
     dc.fillCircle(startX, startY, circleRadius);
-    
+
     // END CIRCLE: Colored (indicates current progress)
     dc.setColor(color, Graphics.COLOR_TRANSPARENT);
     dc.fillCircle(endX, endY, circleRadius);
-    
   } catch (ex instanceof Lang.OutOfMemoryException) {
     // ✅ ERROR HANDLING: Gracefully degrade if OOM
     // Don't crash; just skip endpoint circles
@@ -275,24 +296,23 @@ private function drawArcEndpoints(
   currentEndDegree as Number,
   color as Number
 ) as Void {
-  
   // Calculate start point (270° = 9 o'clock = bottom-left)
-  var startRadians = (270.0 * Math.PI / 180.0);
+  var startRadians = (270.0 * Math.PI) / 180.0;
   var startX = centerX + (radius * Math.cos(startRadians)).toNumber();
   var startY = centerY + (radius * Math.sin(startRadians)).toNumber();
-  
+
   // Calculate end point (current progress degree)
-  var endRadians = (currentEndDegree.toFloat() * Math.PI / 180.0);
+  var endRadians = (currentEndDegree.toFloat() * Math.PI) / 180.0;
   var endX = centerX + (radius * Math.cos(endRadians)).toNumber();
   var endY = centerY + (radius * Math.sin(endRadians)).toNumber();
-  
+
   // Draw small circles (4px radius = 8px diameter) at both endpoints
   var circleRadius = 4;
-  
+
   // Start circle (always light gray, static)
   dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
   dc.fillCircle(startX, startY, circleRadius);
-  
+
   // End circle (colored, changes with progress)
   dc.setColor(color, Graphics.COLOR_TRANSPARENT);
   dc.fillCircle(endX, endY, circleRadius);
@@ -304,18 +324,18 @@ private function drawArcEndpoints(
 private function getArcColor(progress as Float) as Number {
   // ✅ DEFENSIVE: Handle invalid or null progress
   if (progress == null || progress < 0.0) {
-    return Graphics.COLOR_GREEN;  // Fallback: not started
+    return Graphics.COLOR_GREEN; // Fallback: not started
   }
-  
+
   // ✅ COLOR THRESHOLDS: Stepped transitions (not gradients)
-  if (progress < 0.50) {
-    return Graphics.COLOR_GREEN;  // 0-50%: Good pace, plenty of time
-  } else if (progress < 0.80) {
-    return Graphics.COLOR_YELLOW;  // 50-80%: Approaching finish
+  if (progress < 0.5) {
+    return Graphics.COLOR_GREEN; // 0-50%: Good pace, plenty of time
+  } else if (progress < 0.8) {
+    return Graphics.COLOR_YELLOW; // 50-80%: Approaching finish
   } else {
-    return Graphics.COLOR_RED;  // 80%+: Close to finish or overdue
+    return Graphics.COLOR_RED; // 80%+: Close to finish or overdue
   }
-  
+
   // Note: Never returns null or undefined color
 }
 ```
@@ -325,10 +345,10 @@ private function getArcColor(progress as Float) as Number {
 ```monkeyc
 function onUpdate(dc as Dc) as Void {
   updateColors();
-  
+
   dc.setColor(mForegroundColor, mBackgroundColor);
   dc.clear();
-  
+
   // AMOLED burn-in prevention (existing code - UNCHANGED)
   if (mIsAmoled) {
     mUpdateCount++;
@@ -339,10 +359,10 @@ function onUpdate(dc as Dc) as Void {
       mPositionOffset = cycle - MAX_OFFSET;
     }
   }
-  
+
   var screenHeight = System.getDeviceSettings().screenHeight;
   var isFullScreen = (mFieldHeight * 100) / screenHeight > 60;
-  
+
   if (isFullScreen) {
     // NEW: Draw arc at top, then 3-row display below
     drawProgressArc(dc);
@@ -364,58 +384,62 @@ function onUpdate(dc as Dc) as Void {
 private function calculateArcProgress() as Float {
   // ✅ DEFENSIVE: Array bounds checking
   if (mDisplayIndices == null || mDisplayIndices.size() == 0) {
-    return 0.0;  // Display not initialized
+    return 0.0; // Display not initialized
   }
-  
+
   // Get target milestone index (first item in 3-row display)
   var nextMilestoneIdx = mDisplayIndices[0];
-  
+
   // ✅ BOUNDS CHECK: Ensure index is valid
   if (nextMilestoneIdx < 0 || nextMilestoneIdx >= MILESTONE_COUNT) {
-    return 0.0;  // Invalid milestone index
+    return 0.0; // Invalid milestone index
   }
-  
+
   // ✅ BOUNDS CHECK: Ensure distance array has this index
   if (mDistancesCm == null || mDistancesCm.size() <= nextMilestoneIdx) {
-    return 0.0;  // Distance array corrupted or uninitialized
+    return 0.0; // Distance array corrupted or uninitialized
   }
-  
+
   // Get next milestone distance in centimeters
   var nextMilestoneDistanceCm = mDistancesCm[nextMilestoneIdx];
-  
+
   // Get previous milestone distance (0 if first milestone)
   var prevMilestoneDistanceCm = 0;
   if (nextMilestoneIdx > 0) {
     prevMilestoneDistanceCm = mDistancesCm[nextMilestoneIdx - 1];
   }
-  
+
   // Convert current distance from meters to centimeters
   // Note: mCurrentDistance is set in computeImpl() from Activity.Info.elapsedDistance
   var currentDistanceCm = (mCurrentDistance * 100.0).toNumber();
-  
+
   // Calculate segment size (distance between current and next milestone)
   var segmentDistanceCm = nextMilestoneDistanceCm - prevMilestoneDistanceCm;
-  
+
   // ✅ SAFETY: Prevent division by zero
   if (segmentDistanceCm <= 0) {
-    return 0.0;  // Invalid segment (should not happen with valid milestones)
+    return 0.0; // Invalid segment (should not happen with valid milestones)
   }
-  
+
   // Calculate progress within this segment
   var distanceIntoSegmentCm = currentDistanceCm - prevMilestoneDistanceCm;
-  
+
   // ✅ SAFETY: Prevent negative progress if distance goes backward
   if (distanceIntoSegmentCm < 0) {
     return 0.0;
   }
-  
+
   // Calculate progress ratio: 0.0 = at start, 1.0 = at next milestone
   var progress = distanceIntoSegmentCm.toFloat() / segmentDistanceCm.toFloat();
-  
+
   // ✅ CLAMP: Ensure progress stays in valid range [0.0, 1.0]
-  if (progress < 0.0) { progress = 0.0; }
-  if (progress > 1.0) { progress = 1.0; }
-  
+  if (progress < 0.0) {
+    progress = 0.0;
+  }
+  if (progress > 1.0) {
+    progress = 1.0;
+  }
+
   return progress;
 }
 ```
@@ -431,12 +455,12 @@ private function calculateArcProgress() as Float {
 // Postcondition: mCurrentDistance, mArcProgress, mArcColor updated
 private function updateArcState(elapsedDistance as Float) as Void {
   if (elapsedDistance == null || elapsedDistance < 0.0) {
-    return;  // Invalid distance, don't update
+    return; // Invalid distance, don't update
   }
-  
-  mCurrentDistance = elapsedDistance;  // Cache distance in meters
-  mArcProgress = calculateArcProgress();  // Recalculate progress ratio
-  mArcColor = getArcColor(mArcProgress);  // Select color based on progress
+
+  mCurrentDistance = elapsedDistance; // Cache distance in meters
+  mArcProgress = calculateArcProgress(); // Recalculate progress ratio
+  mArcColor = getArcColor(mArcProgress); // Select color based on progress
 }
 ```
 
@@ -460,6 +484,7 @@ try {
 ```
 
 **Why separate function?**
+
 - Encapsulation: Arc logic isolated from main compute flow
 - Error isolation: Arc errors don't crash milestone predictions
 - Testability: Can call updateArcState() independently to debug
@@ -471,12 +496,10 @@ try {
 // Add to initialize() function
 // Arc-specific state (minimal, for progress calculation)
 
-private var mCurrentDistance as Float = 0.0;  // Cache for distance in meters
-private var mArcProgress as Float = 0.0;      // Cache for arc progress (0.0-1.0)
-private var mArcColor as Number = Graphics.COLOR_GREEN;  // Cache for arc color
+private var mCurrentDistance as Float = 0.0; // Cache for distance in meters
+private var mArcProgress as Float = 0.0; // Cache for arc progress (0.0-1.0)
+private var mArcColor as Number = Graphics.COLOR_GREEN; // Cache for arc color
 ```
-
-
 
 ## EDGE CASES (Reuse Your Existing Handling)
 
@@ -512,7 +535,8 @@ if (needsRotation) {
 }
 ```
 
-**Arc Behavior:** 
+**Arc Behavior:**
+
 - When milestone 0 is hit and `mDisplayIndices` rotates, arc **automatically** targets new `mDisplayIndices[0]`
 - Arc progress **instantly resets** to `calculateArcProgress()` of new segment
 - Arc restarts from ~0% pointing to next milestone
@@ -530,6 +554,7 @@ if (mNextMilestonePtr >= MILESTONE_COUNT) {
 ```
 
 **Arc Behavior:**
+
 - `calculateArcProgress()` still runs, returns 1.0 (already at or past milestone)
 - Arc draws fully (450°), stays red
 - `getArcColor(1.0)` returns `COLOR_RED`
@@ -558,7 +583,7 @@ dc.setColor(color, Graphics.COLOR_TRANSPARENT);
 
 ```monkeyc
 // If you want arc to shift position too (additional protection):
-var centerY = (topMargin + 40) + mPositionOffset;  // Apply your existing offset
+var centerY = topMargin + 40 + mPositionOffset; // Apply your existing offset
 ```
 
 **Recommendation:** Arc is already low-risk (fully redrawn every second, not static). The position shift offset is optional. Test on FR 265/965 without it first.
@@ -579,7 +604,7 @@ function updateColors() as Void {
   } else {
     var systemBg = getBackgroundColor();
     mBackgroundColor = systemBg;
-    
+
     if (systemBg == Graphics.COLOR_WHITE || ...) {
       mForegroundColor = Graphics.COLOR_BLACK;
       mAccentColor = Graphics.COLOR_BLUE;
@@ -662,6 +687,7 @@ function calculateArcRadius(fieldWidth as Number) as Number {
 ```
 
 **All Target Devices:**
+
 - **Fenix 7/8** (454px): 100px diameter arc fits comfortably ✓
 - **FR 255/255S** (312px): 100px diameter arc visible ✓
 - **FR 265/265S** (312px AMOLED): 100px diameter arc visible ✓
@@ -674,6 +700,7 @@ function calculateArcRadius(fieldWidth as Number) as Number {
 ### Files to Modify
 
 1. **RaceEstimatorDataField.mc** (main data field class)
+
    - Add: `mCurrentDistance`, `mArcProgress`, `mArcColor` state variables
    - Add: `calculateArcProgress()` function
    - Add: `getArcColor(progress)` function
@@ -750,6 +777,7 @@ Line ~500: Add new functions:
 ### Deployment Strategy (Safe, Phased)
 
 **Phase 1 (No Runtime Impact)**
+
 ```
 1. Add state variables to initialize()
 2. Verify compilation succeeds
@@ -758,6 +786,7 @@ Line ~500: Add new functions:
 ```
 
 **Phase 2 (Safe, Calculated)**
+
 ```
 1. Add 4 helper functions
 2. Modify computeImpl() to call updateArcState()
@@ -767,6 +796,7 @@ Line ~500: Add new functions:
 ```
 
 **Phase 3 (Visible, Full)**
+
 ```
 1. Modify onUpdate() to call drawProgressArc()
 2. Arc now visible on display
@@ -801,15 +831,15 @@ Line ~500: Add new functions:
 
 ### Common Issues & Fixes
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| Arc not visible | `drawProgressArc()` not called | Verify `if (isFullScreen)` block |
-| Arc covers text | `centerY = 60` too low | Change to `centerY = 80` |
-| No endpoint circles | `fillCircle()` not rendering | Check circle radius (try 3px) |
-| Color always GREEN | `updateArcState()` not called | Verify in `computeImpl()` |
-| OOM/crash | Allocation in hot loop | Remove dynamic objects, use stack |
-| Stuttering | Invalid array access | Add bounds check to `calculateArcProgress()` |
-| Predictions break | Arc code throws exception | Add try/catch around `updateArcState()` |
+| Symptom             | Likely Cause                   | Fix                                          |
+| ------------------- | ------------------------------ | -------------------------------------------- |
+| Arc not visible     | `drawProgressArc()` not called | Verify `if (isFullScreen)` block             |
+| Arc covers text     | `centerY = 60` too low         | Change to `centerY = 80`                     |
+| No endpoint circles | `fillCircle()` not rendering   | Check circle radius (try 3px)                |
+| Color always GREEN  | `updateArcState()` not called  | Verify in `computeImpl()`                    |
+| OOM/crash           | Allocation in hot loop         | Remove dynamic objects, use stack            |
+| Stuttering          | Invalid array access           | Add bounds check to `calculateArcProgress()` |
+| Predictions break   | Arc code throws exception      | Add try/catch around `updateArcState()`      |
 
 ---
 
@@ -828,7 +858,7 @@ Line ~500: Add new functions:
 ✓ End circle color matches arc color (green/yellow/red progression)  
 ✓ Milestone 0 hit → display rotates → arc instantly resets to 0% for new milestone  
 ✓ All 9 milestones can be hit sequentially → arc advances through all  
-✓ Final milestone complete → arc caps at 100% red, frozen → end circle at 450° (bottom-right)  
+✓ Final milestone complete → arc caps at 100% red, frozen → end circle at 450° (bottom-right)
 
 ### Device Tests (Fenix 7, FR 255S, FR 265 AMOLED)
 
@@ -837,7 +867,7 @@ Line ~500: Add new functions:
 ✓ Arc colors correct on AMOLED (use standard Garmin palette)  
 ✓ No text clipping or layout issues  
 ✓ Arc updates every second smoothly (no stutter)  
-✓ Position shift (if enabled) works with arc  
+✓ Position shift (if enabled) works with arc
 
 ### Edge Cases
 
@@ -846,70 +876,76 @@ Line ~500: Add new functions:
 ✓ < 5 sec elapsed → arc not drawn (smoothing window)  
 ✓ Paused activity → arc freezes at current progress  
 ✓ Resume activity → arc resumes updating  
-✓ Reset activity → arc resets to 0%, mDisplayIndices resets  
+✓ Reset activity → arc resets to 0%, mDisplayIndices resets
 
 ### Performance
 
 ✓ compute() time unchanged (only 3 line additions)  
 ✓ onUpdate() time <1ms increase (single arc draw call)  
 ✓ Memory usage +32 bytes (negligible)  
-✓ No memory leaks in long activities (2+ hours)  
+✓ No memory leaks in long activities (2+ hours)
 
 ---
 
 ## VISUAL PROGRESSION EXAMPLES
 
 ### Progress: 0% (Segment Start)
+
 ```
     ●─────────────●
    ╱               ╲
   │                 │  Arc: empty (background only)
   │                 │  End circle: at start position (light gray)
    ╲               ╱
-    ●─────────────  
+    ●─────────────
 ```
 
 ### Progress: 25% (Early Stage - GREEN)
+
 ```
     ●───────●─────
    ╱       /╲       ╲
   │      /  ●(green) │  Arc: 1/4 filled (green)
   │     /             │  End circle: 1/4 way (green)
    ╲   /               ╱
-    ●─────────────  
+    ●─────────────
 ```
 
 ### Progress: 50% (Midpoint - YELLOW)
+
 ```
     ●─────────●
    ╱       //╲╲      ╲
   │      /    ●(yellow) │  Arc: 1/2 filled (yellow)
   │     /                │  End circle: at bottom-right (yellow)
    ╲   /               ╱
-    ●─────────────  
+    ●─────────────
 ```
 
 ### Progress: 75% (Late Stage - RED)
+
 ```
     ●───────────●
    ╱       ///╲╲╲╲    ╲
   │      /       ●(red) │  Arc: 3/4 filled (red)
   │     /                │  End circle: 3/4 way (red)
    ╲   /               ╱
-    ●─────────────  
+    ●─────────────
 ```
 
 ### Progress: 100% (Complete - RED)
+
 ```
     ●─────────────●
    ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╲
   │               ●(red) │  Arc: fully filled (red)
   │                       │  End circle: at end position (red)
    ╲                     ╱
-    ●─────────────  
+    ●─────────────
 ```
 
 **Key Details:**
+
 - Start circle (●): Always light gray, never changes
 - End circle (●): Changes color with progress (green → yellow → red)
 - Arc stroke: Changes color, grows from left to right
@@ -971,6 +1007,7 @@ The arc provides immediate, distance-based feedback while your predictions provi
 ### Quality Gates Verification
 
 **Code Quality:**
+
 - ✅ No assumptions (all ambiguities clarified)
 - ✅ Error handling on all new functions (try/catch, null checks)
 - ✅ Defensive programming (bounds checking, type validation)
@@ -979,6 +1016,7 @@ The arc provides immediate, distance-based feedback while your predictions provi
 - ✅ Comprehensive comments (every complex operation documented)
 
 **Architecture:**
+
 - ✅ Integrates without modifying existing logic (additive only)
 - ✅ Reuses existing systems (milestones, colors, rendering)
 - ✅ Phased deployment possible (Phase 1→2→3 safe rollback)
@@ -986,6 +1024,7 @@ The arc provides immediate, distance-based feedback while your predictions provi
 - ✅ Device-aware (tested on all target displays)
 
 **Performance:**
+
 - ✅ <1ms CPU overhead per compute cycle
 - ✅ ~2ms CPU per render frame (negligible at 60 FPS)
 - ✅ +32 bytes memory (within budget)
@@ -993,6 +1032,7 @@ The arc provides immediate, distance-based feedback while your predictions provi
 - ✅ No impact on battery life (<0.1%)
 
 **Testing:**
+
 - ✅ Functional tests defined (all edge cases covered)
 - ✅ Device tests required (Fenix 7/8, FR 255, FR 265, FR 965)
 - ✅ Regression tests (predictions must work unchanged)
@@ -1000,6 +1040,7 @@ The arc provides immediate, distance-based feedback while your predictions provi
 - ✅ Rollback procedure documented
 
 **Documentation:**
+
 - ✅ Specification complete and unambiguous
 - ✅ Implementation steps clear and sequential
 - ✅ Code locations identified
@@ -1011,18 +1052,21 @@ The arc provides immediate, distance-based feedback while your predictions provi
 This specification is **PRODUCTION-READY** when:
 
 **Before Development:**
+
 - [ ] Specification reviewed by 2 developers
 - [ ] No outstanding questions or ambiguities
 - [ ] All requirements understood
 - [ ] Resource allocation confirmed
 
 **Before Testing:**
+
 - [ ] Code implements specification exactly
 - [ ] All new functions have try/catch
 - [ ] All array access has bounds checking
 - [ ] Compilation clean (zero warnings)
 
 **Before Release:**
+
 - [ ] All device tests pass (Phase 1-3 complete)
 - [ ] Memory profile clean (no growth)
 - [ ] Performance acceptable (<1% CPU)
@@ -1030,6 +1074,7 @@ This specification is **PRODUCTION-READY** when:
 - [ ] Release notes prepared
 
 **Post-Release:**
+
 - [ ] Monitor first 24 hours for crashes
 - [ ] Collect user feedback
 - [ ] Fix any critical issues with hotfix
@@ -1037,16 +1082,16 @@ This specification is **PRODUCTION-READY** when:
 
 ### Revision History
 
-| Version | Date | Status | Changes |
-|---------|------|--------|---------|
-| 1.0 | 2025-10-19 | ✅ Production-Ready | Initial specification, all requirements met, phased deployment strategy included |
+| Version | Date       | Status              | Changes                                                                          |
+| ------- | ---------- | ------------------- | -------------------------------------------------------------------------------- |
+| 1.0     | 2025-10-19 | ✅ Production-Ready | Initial specification, all requirements met, phased deployment strategy included |
 
 ### Document Control
 
 - **Specification Title:** Race Estimator: Half-Circle Progress Arc Integration Specification
 - **Version:** 1.0
 - **Status:** ✅ PRODUCTION-READY
-- **API Level:** 5.2.0+
+- **API Level (manifest):** 5.0.0 — recommended SDK: 5.2.0+
 - **Target Devices:** Fenix 7/7S/7X, Fenix 8, FR 255/255S/265/265S, FR 955, FR 965
 - **Memory Impact:** +32 bytes
 - **CPU Impact:** <1ms per cycle
@@ -1057,6 +1102,7 @@ This specification is **PRODUCTION-READY** when:
 ### Contact & Support
 
 For questions or issues during implementation:
+
 1. Review troubleshooting section (Common Issues & Fixes)
 2. Check edge case handling (EDGE CASES section)
 3. Verify device compatibility (DEVICE COMPATIBILITY section)

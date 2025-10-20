@@ -1,3 +1,5 @@
+NOTE: This document is part of the Race Estimator docs set. See `OVERVIEW.md` for the top-level index.
+
 # Time Skip Handling in Simulator
 
 ## Overview
