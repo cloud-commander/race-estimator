@@ -4,6 +4,7 @@ using Toybox.System;
 using Toybox.Position;
 using Toybox.Graphics;
 using Toybox.WatchUi;
+using Toybox.Attention;
 
 class RaceEstimatorView extends WatchUi.DataField {
   // Constants
@@ -232,6 +233,8 @@ class RaceEstimatorView extends WatchUi.DataField {
     if (needsRotation) {
       mMilestones.rebuildDisplay();
       mStateDirty = true;
+      // Vibrate once to celebrate milestone completion
+      vibrateForMilestone();
     }
 
     // Update pace estimation with anomaly detection
@@ -693,6 +696,15 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
 
     mPersistence.clearStorage();
+  }
+
+  private function vibrateForMilestone() as Void {
+    // Vibrate once for milestone celebration
+    if (Attention has :vibrate) {
+      // Vibration pattern for milestone: 100ms vibration
+      var profile = [new Attention.VibeProfile(50, 50)];
+      Attention.vibrate(profile);
+    }
   }
 
   function onTimerStart() as Void {}
