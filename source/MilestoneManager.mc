@@ -386,6 +386,59 @@ class MilestoneManager {
   }
 
   /**
+   * Programmatically mark a milestone as complete and start celebration if needed
+   * @param idx Milestone index
+   * @param timeMs Finish time in milliseconds
+   * @return true if successfully marked, false if invalid or already completed
+   */
+  public function markMilestoneComplete(
+    idx as Lang.Number,
+    timeMs as Lang.Number
+  ) as Lang.Boolean {
+    // Validate index
+    if (idx == null || idx < 0 || idx >= mMilestoneCount) {
+      if (mDebugLogging) {
+        System.println("MilestoneManager: markMilestoneComplete invalid idx " + idx);
+      }
+      return false;
+    }
+
+    // Already completed?
+    if (mFinishTimesMs[idx] != null) {
+      if (mDebugLogging) {
+        System.println("MilestoneManager: markMilestoneComplete idx " + idx + " already completed");
+      }
+      return false;
+    }
+
+    // Mark completion
+    mFinishTimesMs[idx] = timeMs;
+
+    // Vibrate for feedback
+    vibrateForMilestone();
+
+    if (mDebugLogging) {
+      System.println(
+        "MilestoneManager: markMilestoneComplete marked " + idx + " at " + timeMs
+      );
+    }
+
+    // If the milestone is currently in the first display row, start celebration
+    if (mDisplayIndices != null && mDisplayIndices.size() > 0 && mDisplayIndices[0] == idx) {
+      mCelebrationStartTimeMs = timeMs;
+      mCelebrationMilestoneIdx = idx;
+      if (mDebugLogging) {
+        System.println("MilestoneManager: markMilestoneComplete started celebration for " + idx);
+      }
+    }
+
+    // Rebuild display to reflect completed milestone and celebration state
+    rebuildDisplay();
+
+    return true;
+  }
+
+  /**
    * Vibrate to celebrate milestone completion
    * Gracefully handles devices that don't support vibration
    */
