@@ -4,7 +4,6 @@ using Toybox.System;
 // Zero-allocation text display cache with hash-based invalidation
 // Caches formatted display strings to minimize string allocations during updates
 class DisplayTextCache {
-
   // Pre-allocated cache arrays (zero allocation during updates)
   private var mCachedTimes as Lang.Array<Lang.String>;
   private var mCachedLabels as Lang.Array<Lang.String>;
@@ -56,23 +55,31 @@ class DisplayTextCache {
     label as Lang.String,
     finishTime as Lang.Number
   ) as Lang.Boolean {
-
     // Use finish time as hash (changes once when milestone completes)
     var currentHash = finishTime;
 
     // Only update if hash changed (avoids string allocations)
     if (currentHash != mLastDisplayTextHash[rowIndex]) {
       mCachedTimes[rowIndex] = formatTime(finishTime);
-      // Add checkmark to completed milestone
-      mCachedLabels[rowIndex] = Lang.format("$1$ ✓", [label]);
+      // Add ASCII-safe marker to completed milestone (avoid glyph fallback on device fonts)
+      mCachedLabels[rowIndex] = Lang.format("$1$ *", [label]);
       // Combine label and time with double-space separator
-      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$",
-        [mCachedLabels[rowIndex], mCachedTimes[rowIndex]]);
+      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$", [
+        mCachedLabels[rowIndex],
+        mCachedTimes[rowIndex],
+      ]);
       mLastDisplayTextHash[rowIndex] = currentHash;
 
       if (mDebugLogging) {
-        System.println("DisplayTextCache: Updated completed row " + rowIndex +
-                       " (" + label + " @ " + mCachedTimes[rowIndex] + ")");
+        System.println(
+          "DisplayTextCache: Updated completed row " +
+            rowIndex +
+            " (" +
+            label +
+            " @ " +
+            mCachedTimes[rowIndex] +
+            ")"
+        );
       }
 
       return true;
@@ -94,7 +101,6 @@ class DisplayTextCache {
     label as Lang.String,
     remainingTimeMs as Lang.Number
   ) as Lang.Boolean {
-
     // Hash based on seconds (updates once per second, not per frame)
     var currentHash = (remainingTimeMs / 1000).toNumber();
 
@@ -102,8 +108,10 @@ class DisplayTextCache {
     if (currentHash != mLastDisplayTextHash[rowIndex]) {
       mCachedTimes[rowIndex] = formatTime(remainingTimeMs);
       mCachedLabels[rowIndex] = label;
-      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$",
-        [mCachedLabels[rowIndex], mCachedTimes[rowIndex]]);
+      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$", [
+        mCachedLabels[rowIndex],
+        mCachedTimes[rowIndex],
+      ]);
       mLastDisplayTextHash[rowIndex] = currentHash;
 
       return true;
@@ -122,17 +130,20 @@ class DisplayTextCache {
     rowIndex as Lang.Number,
     label as Lang.String
   ) as Lang.Boolean {
-
     // Only update if hash changed (use -1 as special marker for zero state)
     if (mLastDisplayTextHash[rowIndex] != -1) {
       mCachedTimes[rowIndex] = "0:00";
       mCachedLabels[rowIndex] = label;
-      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$",
-        [mCachedLabels[rowIndex], mCachedTimes[rowIndex]]);
+      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$", [
+        mCachedLabels[rowIndex],
+        mCachedTimes[rowIndex],
+      ]);
       mLastDisplayTextHash[rowIndex] = -1;
 
       if (mDebugLogging) {
-        System.println("DisplayTextCache: Updated zero row " + rowIndex + " (" + label + ")");
+        System.println(
+          "DisplayTextCache: Updated zero row " + rowIndex + " (" + label + ")"
+        );
       }
 
       return true;
@@ -241,7 +252,7 @@ class DisplayTextCache {
     return {
       "rowCount" => mRowCount,
       "displayTexts" => mCachedDisplayTexts,
-      "hashes" => mLastDisplayTextHash
+      "hashes" => mLastDisplayTextHash,
     };
   }
 }
