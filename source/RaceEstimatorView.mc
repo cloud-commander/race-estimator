@@ -413,7 +413,7 @@ class RaceEstimatorView extends WatchUi.DataField {
       // Calculate approximate widths for label and time (using proportional spacing)
       var labelWidth = (label.length() * 7).toNumber(); // ~7 pixels per char in FONT_SMALL
       var timeWidth = (time.length() * 10).toNumber(); // ~10 pixels per char in FONT_MEDIUM
-      var spacing = 15; // Space between label and time
+      var spacing = 30; // Space between label and time
       var totalWidth = labelWidth + spacing + timeWidth;
 
       // Center the entire label+time group within the screen
@@ -451,7 +451,7 @@ class RaceEstimatorView extends WatchUi.DataField {
     // Dynamically center label+time pair based on display width
     var labelWidth = (label.length() * 7).toNumber(); // ~7 pixels per char in FONT_SMALL
     var timeWidth = (time.length() * 10).toNumber(); // ~10 pixels per char in FONT_MEDIUM
-    var spacing = 15; // Space between label and time
+    var spacing = 30; // Space between label and time
     var totalWidth = labelWidth + spacing + timeWidth;
 
     // Center the entire label+time group within the screen
