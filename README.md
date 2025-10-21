@@ -39,6 +39,63 @@ Quick start — install a prebuilt binary
 1. Open `build/` and pick the binary that matches your device (e.g., `RaceEstimator-fenix7.prg`, `RaceEstimator-fr255s.prg`).
 2. Copy the `.prg` to your watch `GARMIN/Apps` folder (macOS: use Android File Transfer or MTP tool).
 
+## Sideloading the `.prg` to a device (detailed)
+
+Below are step-by-step instructions for copying a built `.prg` onto a Garmin device across common platforms and how to use the Connect IQ Simulator for testing.
+
+macOS
+
+- Recommended: Use OpenMTP (https://openmtp.ganeshrvel/) or Android File Transfer.
+- Steps:
+  1. Connect the device with a USB cable.
+  2. Open OpenMTP / Android File Transfer and wait for the device to appear.
+  3. In the device view, open the `GARMIN/Apps` folder.
+  4. Drag the `.prg` file (for example `RaceEstimator-fenix7.prg`) into `GARMIN/Apps`.
+  5. Eject the device from OpenMTP and unplug the cable.
+  6. On the watch, add the data field to an activity screen (Settings → Activities & Apps → choose activity → Data Screens → Add).
+
+Command-line (when device is mounted at `/Volumes/GARMIN`):
+
+```bash
+cp build/RaceEstimator-fenix7.prg /Volumes/GARMIN/Apps/
+diskutil eject /Volumes/GARMIN
+```
+
+Windows
+
+- Use Windows Explorer when the device is connected by USB (it will appear as an MTP device).
+- Steps:
+  1. Connect the device via USB.
+  2. Open File Explorer and look for the device under "This PC" (may appear as a MTP device).
+  3. Navigate to `GARMIN/Apps`.
+  4. Copy the `.prg` into the `Apps` folder.
+  5. Safely eject the device and disconnect the cable.
+
+Linux
+
+- Use `mtp-tools`, `jmtpfs`, or a file manager that supports MTP to access the device.
+- Example with `jmtpfs`:
+  1. Install: `sudo apt install jmtpfs`
+  2. Create a mount point: `mkdir ~/garmin`
+  3. Mount your device: `jmtpfs ~/garmin`
+  4. Copy the PRG: `cp build/RaceEstimator-fenix7.prg ~/garmin/GARMIN/Apps/`
+  5. Unmount: `fusermount -u ~/garmin`
+
+Connect IQ Simulator (recommended for iterative testing)
+
+- The Connect IQ IDE / Simulator is the fastest way to iterate. It installs the app automatically when you run from the IDE.
+- You can also drag the compiled `.prg` onto the simulator window to install it.
+- Use `System.println("[RaceEst] ...")` in the code to print debugging output in the simulator console.
+
+Troubleshooting
+
+- Device not visible: try a different USB cable or port. On macOS prefer OpenMTP over Android File Transfer if you see issues.
+- "Invalid app" on the watch: make sure you built and signed with a valid developer key (`-y` parameter to `monkeyc`).
+- Permission denied reading key during build: ensure developer key file permissions allow read by you (`chmod 600`).
+- Watch won't show the data field: ensure the `.prg` file is in `GARMIN/Apps` and that the watch model is supported by the build target.
+
+If you want, I can add a small shell script to automate building for several targets and copying to a mounted device path.
+
 Build from source (developer)
 
 - Requirements: Garmin Connect IQ SDK (recommended 5.2.0+), `monkeyc` CLI, and your Connect IQ developer key.
