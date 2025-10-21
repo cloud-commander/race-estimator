@@ -1,10 +1,10 @@
 using Toybox.Lang;
 using Toybox.System;
+using Toybox.Attention;
 
 // Manages race milestone tracking, completion state, and celebration logic
 // Fully encapsulates milestone business logic separate from UI concerns
 class MilestoneManager {
-
   // Milestone configuration
   private var mDistancesCm as Lang.Array<Lang.Number>;
   private var mLabels as Lang.Array<Lang.String>;
@@ -20,8 +20,8 @@ class MilestoneManager {
   private var mCelebrationMilestoneIdx as Lang.Number? = null;
 
   // Constants
-  private const CELEBRATION_DURATION_MS = 15000;  // 15 seconds
-  private const CELEBRATION_TIMEOUT_MS = 60000;   // 1 minute max (safety)
+  private const CELEBRATION_DURATION_MS = 15000; // 15 seconds
+  private const CELEBRATION_TIMEOUT_MS = 60000; // 1 minute max (safety)
 
   // Debug logging
   private var mDebugLogging as Lang.Boolean = false;
@@ -43,21 +43,22 @@ class MilestoneManager {
 
     // Define standard race distances in centimeters
     // 5K, 5MI, 10K, 13.1K, 10MI, HM, 26.2K, FM, 50K
-    mDistancesCm = [
-      500000,    // 5K
-      804672,    // 5 miles
-      1000000,   // 10K
-      1310000,   // 13.1K
-      1609344,   // 10 miles
-      2109750,   // Half marathon
-      2620000,   // 26.2K
-      4219500,   // Full marathon
-      5000000    // 50K
-    ] as Lang.Array<Lang.Number>;
+    mDistancesCm =
+      [
+        500000, // 5K
+        804672, // 5 miles
+        1000000, // 10K
+        1310000, // 13.1K
+        1609344, // 10 miles
+        2109750, // Half marathon
+        2620000, // 26.2K
+        4219500, // Full marathon
+        5000000, // 50K
+      ] as Lang.Array<Lang.Number>;
 
-    mLabels = [
-      "5K", "5MI", "10K", "13.1K", "10MI", "HM", "26.2K", "FM", "50K"
-    ] as Lang.Array<Lang.String>;
+    mLabels =
+      ["5K", "5MI", "10K", "13.1K", "10MI", "HM", "26.2K", "FM", "50K"] as
+      Lang.Array<Lang.String>;
 
     // Initialize completion tracking
     mFinishTimesMs = new Lang.Array<Lang.Number?>[mMilestoneCount];
@@ -72,8 +73,18 @@ class MilestoneManager {
     }
 
     if (mDebugLogging) {
-      System.println("MilestoneManager: Initialized with " + mMilestoneCount + " milestones");
-      System.println("Display indices: [" + mDisplayIndices[0] + ", " + mDisplayIndices[1] + ", " + mDisplayIndices[2] + "]");
+      System.println(
+        "MilestoneManager: Initialized with " + mMilestoneCount + " milestones"
+      );
+      System.println(
+        "Display indices: [" +
+          mDisplayIndices[0] +
+          ", " +
+          mDisplayIndices[1] +
+          ", " +
+          mDisplayIndices[2] +
+          "]"
+      );
     }
   }
 
@@ -180,11 +191,15 @@ class MilestoneManager {
 
     // Validate celebration state to prevent memory leaks
     if (mCelebrationStartTimeMs != null) {
-      if (timerTimeMs < mCelebrationStartTimeMs ||
-          timerTimeMs - mCelebrationStartTimeMs > CELEBRATION_TIMEOUT_MS) {
+      if (
+        timerTimeMs < mCelebrationStartTimeMs ||
+        timerTimeMs - mCelebrationStartTimeMs > CELEBRATION_TIMEOUT_MS
+      ) {
         // Invalid or timeout - clear celebration
         if (mDebugLogging) {
-          System.println("MilestoneManager: Celebration timeout or invalid state");
+          System.println(
+            "MilestoneManager: Celebration timeout or invalid state"
+          );
         }
         mCelebrationStartTimeMs = null;
         mCelebrationMilestoneIdx = null;
@@ -196,19 +211,31 @@ class MilestoneManager {
       var idx = mDisplayIndices[i];
 
       // Comprehensive array bounds validation
-      if (idx != null &&
-          idx >= 0 &&
-          idx < mMilestoneCount &&
-          idx < mDistancesCm.size() &&
-          idx < mFinishTimesMs.size() &&
-          mFinishTimesMs[idx] == null &&
-          currentDistanceCm >= mDistancesCm[idx].toDouble() - toleranceCm) {
-
+      if (
+        idx != null &&
+        idx >= 0 &&
+        idx < mMilestoneCount &&
+        idx < mDistancesCm.size() &&
+        idx < mFinishTimesMs.size() &&
+        mFinishTimesMs[idx] == null &&
+        currentDistanceCm >= mDistancesCm[idx].toDouble() - toleranceCm
+      ) {
         // Milestone completed!
         mFinishTimesMs[idx] = timerTimeMs;
 
+        // Vibrate to celebrate milestone completion
+        vibrateForMilestone();
+
         if (mDebugLogging) {
-          System.println("MilestoneManager: Milestone " + idx + " (" + mLabels[idx] + ") completed at " + timerTimeMs + "ms");
+          System.println(
+            "MilestoneManager: Milestone " +
+              idx +
+              " (" +
+              mLabels[idx] +
+              ") completed at " +
+              timerTimeMs +
+              "ms"
+          );
         }
 
         if (i == 0) {
@@ -218,15 +245,19 @@ class MilestoneManager {
           needsRotation = true;
 
           if (mDebugLogging) {
-            System.println("MilestoneManager: Starting celebration for milestone " + idx);
+            System.println(
+              "MilestoneManager: Starting celebration for milestone " + idx
+            );
           }
         }
       }
     }
 
     // Check if celebration period has ended
-    if (mCelebrationStartTimeMs != null &&
-        timerTimeMs - mCelebrationStartTimeMs >= CELEBRATION_DURATION_MS) {
+    if (
+      mCelebrationStartTimeMs != null &&
+      timerTimeMs - mCelebrationStartTimeMs >= CELEBRATION_DURATION_MS
+    ) {
       // Celebration ended - rotate to next milestone
       if (mDebugLogging) {
         System.println("MilestoneManager: Celebration ended, rotating display");
@@ -254,7 +285,7 @@ class MilestoneManager {
     // If celebrating, keep completed milestone in first row temporarily
     if (mCelebrationStartTimeMs != null && mCelebrationMilestoneIdx != null) {
       // Check if this is the last milestone
-      var isLastMilestone = (mCelebrationMilestoneIdx == mMilestoneCount - 1);
+      var isLastMilestone = mCelebrationMilestoneIdx == mMilestoneCount - 1;
 
       if (isLastMilestone) {
         // Last milestone - keep showing it permanently, end celebration
@@ -262,7 +293,9 @@ class MilestoneManager {
         mCelebrationMilestoneIdx = null;
 
         if (mDebugLogging) {
-          System.println("MilestoneManager: Last milestone reached, ending celebration");
+          System.println(
+            "MilestoneManager: Last milestone reached, ending celebration"
+          );
         }
       } else {
         // Show completed milestone in first row during celebration
@@ -282,10 +315,15 @@ class MilestoneManager {
     mDisplayIndices = newDisplayIndices;
 
     if (mDebugLogging) {
-      System.println("MilestoneManager: Display rebuilt - indices: [" +
-                     mDisplayIndices[0] + ", " +
-                     mDisplayIndices[1] + ", " +
-                     mDisplayIndices[2] + "]");
+      System.println(
+        "MilestoneManager: Display rebuilt - indices: [" +
+          mDisplayIndices[0] +
+          ", " +
+          mDisplayIndices[1] +
+          ", " +
+          mDisplayIndices[2] +
+          "]"
+      );
     }
   }
 
@@ -325,11 +363,15 @@ class MilestoneManager {
    * @param times Array of finish times to restore
    * @return true if successfully set
    */
-  public function setFinishTimesMs(times as Lang.Array<Lang.Number?>) as Lang.Boolean {
+  public function setFinishTimesMs(
+    times as Lang.Array<Lang.Number?>
+  ) as Lang.Boolean {
     // Validate array size
     if (times.size() != mMilestoneCount) {
       if (mDebugLogging) {
-        System.println("MilestoneManager: Cannot restore finish times - size mismatch");
+        System.println(
+          "MilestoneManager: Cannot restore finish times - size mismatch"
+        );
       }
       return false;
     }
@@ -341,5 +383,17 @@ class MilestoneManager {
     }
 
     return true;
+  }
+
+  /**
+   * Vibrate to celebrate milestone completion
+   * Gracefully handles devices that don't support vibration
+   */
+  private function vibrateForMilestone() as Void {
+    if (Attention has :vibrate) {
+      // Single vibration pulse: 50ms vibration
+      var profile = [new Attention.VibeProfile(50, 50)];
+      Attention.vibrate(profile);
+    }
   }
 }
