@@ -398,7 +398,9 @@ class MilestoneManager {
     // Validate index
     if (idx == null || idx < 0 || idx >= mMilestoneCount) {
       if (mDebugLogging) {
-        System.println("MilestoneManager: markMilestoneComplete invalid idx " + idx);
+        System.println(
+          "MilestoneManager: markMilestoneComplete invalid idx " + idx
+        );
       }
       return false;
     }
@@ -406,7 +408,11 @@ class MilestoneManager {
     // Already completed?
     if (mFinishTimesMs[idx] != null) {
       if (mDebugLogging) {
-        System.println("MilestoneManager: markMilestoneComplete idx " + idx + " already completed");
+        System.println(
+          "MilestoneManager: markMilestoneComplete idx " +
+            idx +
+            " already completed"
+        );
       }
       return false;
     }
@@ -419,16 +425,26 @@ class MilestoneManager {
 
     if (mDebugLogging) {
       System.println(
-        "MilestoneManager: markMilestoneComplete marked " + idx + " at " + timeMs
+        "MilestoneManager: markMilestoneComplete marked " +
+          idx +
+          " at " +
+          timeMs
       );
     }
 
     // If the milestone is currently in the first display row, start celebration
-    if (mDisplayIndices != null && mDisplayIndices.size() > 0 && mDisplayIndices[0] == idx) {
+    if (
+      mDisplayIndices != null &&
+      mDisplayIndices.size() > 0 &&
+      mDisplayIndices[0] == idx
+    ) {
       mCelebrationStartTimeMs = timeMs;
       mCelebrationMilestoneIdx = idx;
       if (mDebugLogging) {
-        System.println("MilestoneManager: markMilestoneComplete started celebration for " + idx);
+        System.println(
+          "MilestoneManager: markMilestoneComplete started celebration for " +
+            idx
+        );
       }
     }
 
