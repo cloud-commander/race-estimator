@@ -15,9 +15,9 @@ class RaceEstimatorView extends WatchUi.DataField {
 
   // DEBUG: Ignore storage and always start fresh (automatically disabled in release builds)
   (:debug)
-  private const DEBUG_IGNORE_STORAGE = true;   // SIMULATOR: Always start fresh
+  private const DEBUG_IGNORE_STORAGE = true; // SIMULATOR: Always start fresh
   (:release)
-  private const DEBUG_IGNORE_STORAGE = false;  // PRODUCTION: Storage enabled
+  private const DEBUG_IGNORE_STORAGE = false; // PRODUCTION: Storage enabled
 
   // DEBUG: Enable verbose logging (automatically disabled in release builds)
   (:debug)
@@ -27,12 +27,12 @@ class RaceEstimatorView extends WatchUi.DataField {
 
   // Heart icon display constants
   private const HEART_ICON_SIZE = 4;
-  private const HEART_ICON_OFFSET_Y = 3;  // Vertical offset for heart icon alignment
-  private const HEART_RATE_TOP_PADDING = 10;  // Additional top padding for HR display
-  private const HR_TEXT_WIDTH_ESTIMATE = 30;  // Conservative estimate for 3-digit HR (Issue #2)
-  private const HR_ICON_TEXT_SPACING = 5;  // Space between heart icon and text
+  private const HEART_ICON_OFFSET_Y = 3; // Vertical offset for heart icon alignment
+  private const HEART_RATE_TOP_PADDING = 10; // Additional top padding for HR display
+  private const HR_TEXT_WIDTH_ESTIMATE = 30; // Conservative estimate for 3-digit HR (Issue #2)
+  private const HR_ICON_TEXT_SPACING = 5; // Space between heart icon and text
 
-  private const BOTTOM_TEXT_POSITION_PERCENT = 0.80;
+  private const BOTTOM_TEXT_POSITION_PERCENT = 0.8;
 
   // Core business logic (refactored to separate classes)
   private var mMilestones as MilestoneManager;
@@ -55,9 +55,9 @@ class RaceEstimatorView extends WatchUi.DataField {
   private const SAFE_MODE_RECOVERY_CYCLES = 10;
   private const HR_SANITY_MIN = 0;
   private const HR_SANITY_MAX = 250;
-  private const MIN_DISTANCE_EPSILON = 0.1;  // 10cm minimum distance
-  private const MAX_TIME_REMAINING_MS = 360000000;  // 100 hours max
-  private const FULLSCREEN_THRESHOLD_PERCENT = 0.60;  // 60% = 3/5
+  private const MIN_DISTANCE_EPSILON = 0.1; // 10cm minimum distance
+  private const MAX_TIME_REMAINING_MS = 360000000; // 100 hours max
+  private const FULLSCREEN_THRESHOLD_PERCENT = 0.6; // 60% = 3/5
 
   // Remaining distance display
   private var mRemainingDistanceKm as Lang.String = "";
@@ -78,7 +78,7 @@ class RaceEstimatorView extends WatchUi.DataField {
   private var mLastRemainingKm as Lang.Double = -1.0d;
 
   // Screen height cache to avoid repeated system calls
-  private var mScreenHeight as Lang.Number = 100;  // Safe default to prevent division issues
+  private var mScreenHeight as Lang.Number = 100; // Safe default to prevent division issues
 
   // Heart icon triangle cache (reusable to avoid allocations)
   private var mHeartTriangle as Lang.Array<Lang.Array<Lang.Number> >?;
@@ -96,12 +96,23 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
 
     // Initialize core business logic classes
-    mMilestones = new MilestoneManager(MILESTONE_COUNT, DISPLAY_ROW_COUNT, DEBUG_LOGGING);
+    mMilestones = new MilestoneManager(
+      MILESTONE_COUNT,
+      DISPLAY_ROW_COUNT,
+      DEBUG_LOGGING
+    );
     mPaceEstimator = new PaceEstimator(DEBUG_LOGGING);
-    mPersistence = new PersistenceManager(5000, DEBUG_LOGGING);  // 5 second save throttle
+    mPersistence = new PersistenceManager(5000, DEBUG_LOGGING); // 5 second save throttle
     mDisplayCache = new DisplayTextCache(DISPLAY_ROW_COUNT, DEBUG_LOGGING);
-    mBurnInProtection = new AmoledBurnInManager(POSITION_SHIFT_INTERVAL, mIsAmoled, DEBUG_LOGGING);
-    mDataValidator = new ActivityDataValidator(MIN_PREDICTION_DISTANCE, DEBUG_LOGGING);
+    mBurnInProtection = new AmoledBurnInManager(
+      POSITION_SHIFT_INTERVAL,
+      mIsAmoled,
+      DEBUG_LOGGING
+    );
+    mDataValidator = new ActivityDataValidator(
+      MIN_PREDICTION_DISTANCE,
+      DEBUG_LOGGING
+    );
     mColorScheme = new ColorSchemeManager(mIsAmoled, DEBUG_LOGGING);
 
     // Load saved state from storage (will override defaults if valid data exists)
@@ -110,15 +121,29 @@ class RaceEstimatorView extends WatchUi.DataField {
     if (DEBUG_LOGGING) {
       System.println("=== AFTER STORAGE LOAD ===");
       var displayIndices = mMilestones.getDisplayIndices();
-      System.println("Display indices: [" + displayIndices[0] + ", " + displayIndices[1] + ", " + displayIndices[2] + "]");
-      System.println("Labels: [" + mDisplayCache.getLabel(0) + ", " + mDisplayCache.getLabel(1) + ", " + mDisplayCache.getLabel(2) + "]");
+      System.println(
+        "Display indices: [" +
+          displayIndices[0] +
+          ", " +
+          displayIndices[1] +
+          ", " +
+          displayIndices[2] +
+          "]"
+      );
+      System.println(
+        "Labels: [" +
+          mDisplayCache.getLabel(0) +
+          ", " +
+          mDisplayCache.getLabel(1) +
+          ", " +
+          mDisplayCache.getLabel(2) +
+          "]"
+      );
     }
 
     // Initialize color scheme
     mColorScheme.updateColors(getBackgroundColor());
   }
-
-
 
   function compute(info as Activity.Info) as Void {
     if (mErrorState == 1) {
@@ -140,12 +165,18 @@ class RaceEstimatorView extends WatchUi.DataField {
       mConsecutiveErrors++;
       // FIX Issue #17: Consistent error logging
       if (DEBUG_LOGGING) {
-        System.println("Compute error #" + mConsecutiveErrors + ": " + ex.getErrorMessage());
+        System.println(
+          "Compute error #" + mConsecutiveErrors + ": " + ex.getErrorMessage()
+        );
       }
       // FIX Issue #16: Use constant for max errors
       if (mConsecutiveErrors > MAX_CONSECUTIVE_ERRORS) {
         if (DEBUG_LOGGING) {
-          System.println("CRITICAL: Entering safe mode after " + MAX_CONSECUTIVE_ERRORS + " consecutive errors");
+          System.println(
+            "CRITICAL: Entering safe mode after " +
+              MAX_CONSECUTIVE_ERRORS +
+              " consecutive errors"
+          );
         }
         enterSafeMode();
       }
@@ -173,7 +204,12 @@ class RaceEstimatorView extends WatchUi.DataField {
     var elapsedDistance = info.elapsedDistance;
 
     // FIX Issue #6: Add epsilon check to prevent division issues
-    if (timerTime == null || timerTime <= 0 || elapsedDistance == null || elapsedDistance < MIN_DISTANCE_EPSILON) {
+    if (
+      timerTime == null ||
+      timerTime <= 0 ||
+      elapsedDistance == null ||
+      elapsedDistance < MIN_DISTANCE_EPSILON
+    ) {
       return;
     }
 
@@ -188,7 +224,11 @@ class RaceEstimatorView extends WatchUi.DataField {
     var distanceCm = elapsedDistance * 100.0d;
 
     // Check milestone completions and handle celebration state
-    var needsRotation = mMilestones.checkAndMarkCompletions(distanceCm, timerTimeMs, TOLERANCE_CM);
+    var needsRotation = mMilestones.checkAndMarkCompletions(
+      distanceCm,
+      timerTimeMs,
+      TOLERANCE_CM
+    );
     if (needsRotation) {
       mMilestones.rebuildDisplay();
       mStateDirty = true;
@@ -196,7 +236,13 @@ class RaceEstimatorView extends WatchUi.DataField {
 
     // Update pace estimation with anomaly detection
     var currentPaceSecPerMeter = timerTimeSec / elapsedDistance;
-    if (!mPaceEstimator.updatePace(currentPaceSecPerMeter, elapsedDistance, timerTimeSec)) {
+    if (
+      !mPaceEstimator.updatePace(
+        currentPaceSecPerMeter,
+        elapsedDistance,
+        timerTimeSec
+      )
+    ) {
       // Pace rejected due to anomaly - skip this update
       return;
     }
@@ -207,20 +253,27 @@ class RaceEstimatorView extends WatchUi.DataField {
     for (var i = 0; i < DISPLAY_ROW_COUNT; i++) {
       var idx = displayIndices[i];
       // Defensive: Check array bounds before access
-      if (idx == null || idx < 0 || idx >= MILESTONE_COUNT) { continue; }
+      if (idx == null || idx < 0 || idx >= MILESTONE_COUNT) {
+        continue;
+      }
 
       var finishTime = mMilestones.getMilestoneFinishTime(idx);
 
       if (finishTime != null) {
         // Update cache for completed milestone
-        mDisplayCache.updateCompleted(i, mMilestones.getMilestoneLabel(idx), finishTime);
+        mDisplayCache.updateCompleted(
+          i,
+          mMilestones.getMilestoneLabel(idx),
+          finishTime
+        );
 
         // Clear remaining distance when first milestone is completed
         if (i == 0) {
           mRemainingDistanceKm = "";
         }
       } else {
-        var remainingDistanceMeters = mMilestones.getMilestoneDistanceCm(idx) / 100.0d - elapsedDistance;
+        var remainingDistanceMeters =
+          mMilestones.getMilestoneDistanceCm(idx) / 100.0d - elapsedDistance;
         if (remainingDistanceMeters < 0) {
           // Update cache for zero state (distance reached but not marked complete)
           mDisplayCache.updateZero(i, mMilestones.getMilestoneLabel(idx));
@@ -230,14 +283,22 @@ class RaceEstimatorView extends WatchUi.DataField {
           continue;
         }
 
-        var timeRemainingMs = (remainingDistanceMeters * smoothedPace * 1000.0d).toNumber();
+        var timeRemainingMs = (
+          remainingDistanceMeters *
+          smoothedPace *
+          1000.0d
+        ).toNumber();
         // FIX Issue #16: Use constant
         if (timeRemainingMs < 0 || timeRemainingMs > MAX_TIME_REMAINING_MS) {
           timeRemainingMs = MAX_TIME_REMAINING_MS;
         }
 
         // Update cache for in-progress milestone
-        mDisplayCache.updateRemaining(i, mMilestones.getMilestoneLabel(idx), timeRemainingMs);
+        mDisplayCache.updateRemaining(
+          i,
+          mMilestones.getMilestoneLabel(idx),
+          timeRemainingMs
+        );
 
         // Calculate remaining distance for the first (next) milestone
         // Only update when value changes significantly (>0.01 km)
@@ -246,7 +307,9 @@ class RaceEstimatorView extends WatchUi.DataField {
           var kmDiff = remainingKm - mLastRemainingKm;
           if (kmDiff < -0.01 || kmDiff > 0.01) {
             mLastRemainingKm = remainingKm;
-            mRemainingDistanceKm = Lang.format("$1$ km", [remainingKm.format("%.2f")]);
+            mRemainingDistanceKm = Lang.format("$1$ km", [
+              remainingKm.format("%.2f"),
+            ]);
           }
         }
       }
@@ -296,7 +359,10 @@ class RaceEstimatorView extends WatchUi.DataField {
       mColorScheme.updateColors(currentBg);
     }
 
-    dc.setColor(mColorScheme.getForegroundColor(), mColorScheme.getBackgroundColor());
+    dc.setColor(
+      mColorScheme.getForegroundColor(),
+      mColorScheme.getBackgroundColor()
+    );
     dc.clear();
 
     // Update AMOLED burn-in protection (pixel shifting)
@@ -304,7 +370,8 @@ class RaceEstimatorView extends WatchUi.DataField {
 
     // Use cached screen height instead of system call
     // FIX Issue #16: Use constant
-    var isFullScreen = mFieldHeight > (mScreenHeight * FULLSCREEN_THRESHOLD_PERCENT);
+    var isFullScreen =
+      mFieldHeight > mScreenHeight * FULLSCREEN_THRESHOLD_PERCENT;
 
     if (isFullScreen) {
       drawFullScreen(dc);
@@ -318,7 +385,9 @@ class RaceEstimatorView extends WatchUi.DataField {
     for (var i = 0; i < DISPLAY_ROW_COUNT; i++) {
       var idx = displayIndices[i];
       // Defensive: Check array bounds before access
-      if (idx == null || idx < 0 || idx >= MILESTONE_COUNT) { continue; }
+      if (idx == null || idx < 0 || idx >= MILESTONE_COUNT) {
+        continue;
+      }
 
       var offset = mBurnInProtection.getOffset();
       var yPos = getYPosition(i) + offset;
@@ -326,7 +395,10 @@ class RaceEstimatorView extends WatchUi.DataField {
       if (mIsAmoled && isHit) {
         dc.setColor(mColorScheme.getDimmedColor(), Graphics.COLOR_TRANSPARENT);
       } else {
-        dc.setColor(mColorScheme.getForegroundColor(), Graphics.COLOR_TRANSPARENT);
+        dc.setColor(
+          mColorScheme.getForegroundColor(),
+          Graphics.COLOR_TRANSPARENT
+        );
       }
 
       // Draw label and time with proper visual hierarchy
@@ -337,13 +409,32 @@ class RaceEstimatorView extends WatchUi.DataField {
       var labelFont = Graphics.FONT_SMALL;
       var timeFont = Graphics.FONT_MEDIUM;
 
-      // P0 Fix: Remove vertical offset - align on same baseline for better readability
-      // P0 Fix: Use LEFT justification for labels, CENTER for times (natural reading flow)
-      var labelX = mCenterX - (dc.getWidth() * 0.15).toNumber();  // Label at 35% screen
-      var timeX = mCenterX + (dc.getWidth() * 0.10).toNumber();   // Time at 60% screen
+      // P0 Fix: Dynamically center label+time pair based on display width
+      // Calculate approximate widths for label and time (using proportional spacing)
+      var labelWidth = (label.length() * 7).toNumber(); // ~7 pixels per char in FONT_SMALL
+      var timeWidth = (time.length() * 10).toNumber(); // ~10 pixels per char in FONT_MEDIUM
+      var spacing = 15; // Space between label and time
+      var totalWidth = labelWidth + spacing + timeWidth;
 
-      dc.drawText(labelX + offset, yPos, labelFont, label, Graphics.TEXT_JUSTIFY_LEFT);
-      dc.drawText(timeX + offset, yPos, timeFont, time, Graphics.TEXT_JUSTIFY_LEFT);
+      // Center the entire label+time group within the screen
+      var startX = mCenterX - totalWidth / 2;
+      var labelX = startX;
+      var timeX = labelX + labelWidth + spacing;
+
+      dc.drawText(
+        labelX + offset,
+        yPos,
+        labelFont,
+        label,
+        Graphics.TEXT_JUSTIFY_LEFT
+      );
+      dc.drawText(
+        timeX + offset,
+        yPos,
+        timeFont,
+        time,
+        Graphics.TEXT_JUSTIFY_LEFT
+      );
     }
 
     drawStatus(dc);
@@ -357,12 +448,31 @@ class RaceEstimatorView extends WatchUi.DataField {
 
     dc.setColor(mColorScheme.getForegroundColor(), Graphics.COLOR_TRANSPARENT);
 
-    // Same layout as full-screen: label left, time right
-    var labelX = mCenterX - (dc.getWidth() * 0.15).toNumber();
-    var timeX = mCenterX + (dc.getWidth() * 0.10).toNumber();
+    // Dynamically center label+time pair based on display width
+    var labelWidth = (label.length() * 7).toNumber(); // ~7 pixels per char in FONT_SMALL
+    var timeWidth = (time.length() * 10).toNumber(); // ~10 pixels per char in FONT_MEDIUM
+    var spacing = 15; // Space between label and time
+    var totalWidth = labelWidth + spacing + timeWidth;
 
-    dc.drawText(labelX, mRow1Y, Graphics.FONT_SMALL, label, Graphics.TEXT_JUSTIFY_LEFT);
-    dc.drawText(timeX, mRow1Y, Graphics.FONT_MEDIUM, time, Graphics.TEXT_JUSTIFY_LEFT);
+    // Center the entire label+time group within the screen
+    var startX = mCenterX - totalWidth / 2;
+    var labelX = startX;
+    var timeX = labelX + labelWidth + spacing;
+
+    dc.drawText(
+      labelX,
+      mRow1Y,
+      Graphics.FONT_SMALL,
+      label,
+      Graphics.TEXT_JUSTIFY_LEFT
+    );
+    dc.drawText(
+      timeX,
+      mRow1Y,
+      Graphics.FONT_MEDIUM,
+      time,
+      Graphics.TEXT_JUSTIFY_LEFT
+    );
   }
 
   private function getYPosition(rowIndex as Lang.Number) as Lang.Number {
@@ -389,10 +499,13 @@ class RaceEstimatorView extends WatchUi.DataField {
     if (!mDataValidator.isGpsQualityGood()) {
       statusText = "WAITING GPS";
       statusColor = mColorScheme.getAccentColor();
-    } else if (!mDataValidator.isMinDistanceReached() || !mPaceEstimator.isWarmedUp()) {
+    } else if (
+      !mDataValidator.isMinDistanceReached() ||
+      !mPaceEstimator.isWarmedUp()
+    ) {
       statusText = "WARMING UP";
       statusColor = mColorScheme.getAccentColor();
-      statusFont = Graphics.FONT_XTINY;  // Smallest font
+      statusFont = Graphics.FONT_XTINY; // Smallest font
     } else if (mMilestones.isAllComplete()) {
       statusText = "COMPLETE";
     } else if (mErrorState == 1) {
@@ -406,15 +519,21 @@ class RaceEstimatorView extends WatchUi.DataField {
     if (statusText != null) {
       dc.setColor(statusColor, Graphics.COLOR_TRANSPARENT);
       var offset = mBurnInProtection.getOffset();
-      var xPos = mCenterX + offset;  // AMOLED: shift X
+      var xPos = mCenterX + offset; // AMOLED: shift X
       var yPos = mStatusY + offset;
 
       // Add extra padding for warming up text
       if (statusText.equals("WARMING UP")) {
-        yPos += 5;  // Additional 5 pixels padding
+        yPos += 5; // Additional 5 pixels padding
       }
 
-      dc.drawText(xPos, yPos, statusFont, statusText, Graphics.TEXT_JUSTIFY_CENTER);
+      dc.drawText(
+        xPos,
+        yPos,
+        statusFont,
+        statusText,
+        Graphics.TEXT_JUSTIFY_CENTER
+      );
     } else if (showHeartRate && mCurrentHR != null) {
       drawHeartRate(dc);
     }
@@ -426,7 +545,9 @@ class RaceEstimatorView extends WatchUi.DataField {
   private function drawHeartRate(dc as Graphics.Dc) as Void {
     // Capture to local variable to prevent race condition
     var hr = mCurrentHR;
-    if (hr == null) { return; }
+    if (hr == null) {
+      return;
+    }
 
     // Apply top padding for better spacing
     var offset = mBurnInProtection.getOffset();
@@ -436,23 +557,23 @@ class RaceEstimatorView extends WatchUi.DataField {
     // Calculate text width to center the entire display (icon + text)
     // FIX Issue #2: Use cached width estimate instead of getTextDimensions (zero allocation)
     var textWidth = HR_TEXT_WIDTH_ESTIMATE;
-    var heartIconWidth = HEART_ICON_SIZE * 2;  // Heart is 2x the icon size wide
+    var heartIconWidth = HEART_ICON_SIZE * 2; // Heart is 2x the icon size wide
     var totalWidth = heartIconWidth + HR_ICON_TEXT_SPACING + textWidth;
 
     // Center the entire group (heart icon + text)
-    var startX = mCenterX - (totalWidth / 2);
+    var startX = mCenterX - totalWidth / 2;
     var heartX = startX + heartIconWidth / 2;
     var textX = startX + heartIconWidth + HR_ICON_TEXT_SPACING;
 
     // Apply pixel shifting on AMOLED to prevent burn-in
     if (mIsAmoled) {
-        heartX += offset;
-        textX += offset;
+      heartX += offset;
+      textX += offset;
     }
 
     var heartY = yPos + HEART_ICON_OFFSET_Y;
     if (mIsAmoled) {
-        heartY += offset;
+      heartY += offset;
     }
 
     // Use green on AMOLED for better burn-in protection (lower OLED power draw)
@@ -460,12 +581,16 @@ class RaceEstimatorView extends WatchUi.DataField {
     dc.setColor(heartColor, Graphics.COLOR_TRANSPARENT);
 
     // Draw simple heart using two circles and a triangle
-    dc.fillCircle(heartX - HEART_ICON_SIZE/2, heartY, HEART_ICON_SIZE);
-    dc.fillCircle(heartX + HEART_ICON_SIZE/2, heartY, HEART_ICON_SIZE);
+    dc.fillCircle(heartX - HEART_ICON_SIZE / 2, heartY, HEART_ICON_SIZE);
+    dc.fillCircle(heartX + HEART_ICON_SIZE / 2, heartY, HEART_ICON_SIZE);
 
     // Initialize triangle cache on first use
     if (mHeartTriangle == null) {
-      mHeartTriangle = [[0, 0], [0, 0], [0, 0]];
+      mHeartTriangle = [
+        [0, 0],
+        [0, 0],
+        [0, 0],
+      ];
     }
 
     // Update triangle vertices in place (no allocation)
@@ -480,7 +605,13 @@ class RaceEstimatorView extends WatchUi.DataField {
 
     // Draw HR value to the right of heart with larger font
     dc.setColor(mColorScheme.getForegroundColor(), Graphics.COLOR_TRANSPARENT);
-    dc.drawText(textX, yPos, Graphics.FONT_SMALL, hrText, Graphics.TEXT_JUSTIFY_LEFT);
+    dc.drawText(
+      textX,
+      yPos,
+      Graphics.FONT_SMALL,
+      hrText,
+      Graphics.TEXT_JUSTIFY_LEFT
+    );
   }
 
   private function drawRemainingDistance(dc as Graphics.Dc) as Void {
@@ -489,15 +620,21 @@ class RaceEstimatorView extends WatchUi.DataField {
     if (!mRemainingDistanceKm.equals("")) {
       dc.setColor(mColorScheme.getAccentColor(), Graphics.COLOR_TRANSPARENT);
       var offset = mBurnInProtection.getOffset();
-      var xPos = mCenterX + offset;  // AMOLED: shift X
-      dc.drawText(xPos, mBottomY + offset, Graphics.FONT_SMALL, mRemainingDistanceKm, Graphics.TEXT_JUSTIFY_CENTER);
+      var xPos = mCenterX + offset; // AMOLED: shift X
+      dc.drawText(
+        xPos,
+        mBottomY + offset,
+        Graphics.FONT_SMALL,
+        mRemainingDistanceKm,
+        Graphics.TEXT_JUSTIFY_CENTER
+      );
     }
   }
 
   private function saveToStorage(timerTimeMs as Lang.Number?) as Void {
     var finishTimes = mMilestones.getFinishTimesMs();
     // Use 0 if timerTimeMs not provided (pause/stop) - bypasses throttle
-    var timeMs = (timerTimeMs != null) ? timerTimeMs : 0;
+    var timeMs = timerTimeMs != null ? timerTimeMs : 0;
 
     if (mPersistence.saveFinishTimes(finishTimes, timeMs)) {
       // FIX Issue #8: Reset error count on successful save
@@ -509,7 +646,9 @@ class RaceEstimatorView extends WatchUi.DataField {
       // After MAX_CONSECUTIVE_ERRORS failures, user should be aware storage is failing
       if (mStorageErrorCount >= MAX_CONSECUTIVE_ERRORS) {
         if (DEBUG_LOGGING) {
-          System.println("WARNING: Storage persistently failing - progress may be lost on restart");
+          System.println(
+            "WARNING: Storage persistently failing - progress may be lost on restart"
+          );
         }
       }
     }
@@ -518,25 +657,32 @@ class RaceEstimatorView extends WatchUi.DataField {
   private function loadFromStorage() as Void {
     // DEBUG: Skip storage loading for testing (always start fresh)
     if (DEBUG_IGNORE_STORAGE) {
-      if (DEBUG_LOGGING) { System.println("DEBUG: Storage ignored, starting fresh"); }
+      if (DEBUG_LOGGING) {
+        System.println("DEBUG: Storage ignored, starting fresh");
+      }
       clearAllData();
       return;
     }
 
     var loadedTimes = mPersistence.loadFinishTimes(MILESTONE_COUNT);
     if (loadedTimes != null) {
-      if (DEBUG_LOGGING) { System.println("Storage loaded successfully"); }
+      if (DEBUG_LOGGING) {
+        System.println("Storage loaded successfully");
+      }
       mMilestones.setFinishTimesMs(loadedTimes);
       mMilestones.rebuildDisplay();
     } else {
-      if (DEBUG_LOGGING) { System.println("No valid storage found, starting fresh"); }
+      if (DEBUG_LOGGING) {
+        System.println("No valid storage found, starting fresh");
+      }
       clearAllData();
     }
   }
 
-
   private function clearAllData() as Void {
-    if (DEBUG_LOGGING) { System.println("=== CLEAR ALL DATA CALLED ==="); }
+    if (DEBUG_LOGGING) {
+      System.println("=== CLEAR ALL DATA CALLED ===");
+    }
 
     // Reset milestone manager
     mMilestones.reset();
@@ -553,14 +699,14 @@ class RaceEstimatorView extends WatchUi.DataField {
 
   function onTimerPause() as Void {
     if (mStateDirty) {
-      saveToStorage(null);  // Force save on pause (bypass throttle)
+      saveToStorage(null); // Force save on pause (bypass throttle)
       mStateDirty = false;
     }
   }
 
   function onTimerStop() as Void {
     if (mStateDirty) {
-      saveToStorage(null);  // Force save on stop (bypass throttle)
+      saveToStorage(null); // Force save on stop (bypass throttle)
       mStateDirty = false;
     }
   }
@@ -591,5 +737,4 @@ class RaceEstimatorView extends WatchUi.DataField {
       mDisplayCache.setInitial(i, mMilestones.getMilestoneLabel(i), "--:--");
     }
   }
-
 }
