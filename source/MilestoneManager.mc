@@ -20,8 +20,8 @@ class MilestoneManager {
   private var mCelebrationMilestoneIdx as Lang.Number? = null;
 
   // Constants
-  private const CELEBRATION_DURATION_MS = 15000; // 15 seconds
-  private const CELEBRATION_TIMEOUT_MS = 60000; // 1 minute max (safety)
+  private const CELEBRATION_DURATION_MS = 5000; // 5 seconds
+  private const CELEBRATION_TIMEOUT_MS = 30000; // 30 seconds max (safety)
 
   // Debug logging
   private var mDebugLogging as Lang.Boolean = false;
