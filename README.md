@@ -1,5 +1,7 @@
 # Race Estimator
 
+> NOTE: Initial BETA release — use and test at your own discretion. Report issues in the repository issues tracker.
+
 Race Estimator is a compact Garmin Connect IQ data field that predicts finish times for nine common race milestones in real time and surfaces three concise predictions on-screen. It's designed for accuracy, low CPU/battery use, and safe rendering on both MIP and AMOLED devices.
 
 Why use it
