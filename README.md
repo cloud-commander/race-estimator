@@ -16,6 +16,12 @@ Highlights — what the data field does
 - Constraints: compute() is optimized to avoid dynamic allocations and run every second; avoid heavy work in onUpdate().
 - Edge cases handled: GPS accuracy checks, minimum-distance gating to avoid wildly inaccurate early predictions, FIT anomaly detection (distance stagnation and pace spikes), and time-skip mitigations.
 
+Recent changes (2025-10-21)
+
+- Dynamic milestone centering: milestone label+time pairs are now centered as a single group based on the display width (no absolute X offsets). This makes the UI consistent across different screen sizes and resolutions.
+- Increased spacing between milestone label and time for improved readability (30px padding between elements).
+- Vibration feedback on milestone completion: the watch now emits a short tactile pulse when a milestone is reached. Vibration is implemented inside `MilestoneManager` so the celebration logic and UI remain separated.
+
 Key facts
 
 - Runtime manifest minApiLevel: 5.0.0
