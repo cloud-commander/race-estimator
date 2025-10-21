@@ -411,9 +411,19 @@ class RaceEstimatorView extends WatchUi.DataField {
 
       // P0 Fix: Dynamically center label+time pair based on display width
       // Calculate approximate widths for label and time (using proportional spacing)
-      var labelWidth = (label.length() * 7).toNumber(); // ~7 pixels per char in FONT_SMALL
-      var timeWidth = (time.length() * 10).toNumber(); // ~10 pixels per char in FONT_MEDIUM
-      var spacing = 30; // Space between label and time
+      // Scale estimates based on field height so larger screens get larger spacing
+      var scale = (mFieldHeight / 200.0).toNumber(); // 200 is base height reference
+      if (scale < 0.75) {
+        scale = 0.75;
+      } // lower bound
+      if (scale > 2.0) {
+        scale = 2.0;
+      } // upper bound to avoid runaway sizes
+      var labelCharPx = (7 * scale).toNumber();
+      var timeCharPx = (10 * scale).toNumber();
+      var labelWidth = (label.length() * labelCharPx).toNumber();
+      var timeWidth = (time.length() * timeCharPx).toNumber();
+      var spacing = (30 * scale).toNumber(); // Space between label and time
       var totalWidth = labelWidth + spacing + timeWidth;
 
       // Center the entire label+time group within the screen
@@ -449,9 +459,19 @@ class RaceEstimatorView extends WatchUi.DataField {
     dc.setColor(mColorScheme.getForegroundColor(), Graphics.COLOR_TRANSPARENT);
 
     // Dynamically center label+time pair based on display width
-    var labelWidth = (label.length() * 7).toNumber(); // ~7 pixels per char in FONT_SMALL
-    var timeWidth = (time.length() * 10).toNumber(); // ~10 pixels per char in FONT_MEDIUM
-    var spacing = 30; // Space between label and time
+    // Use same scaling strategy as full-screen to avoid overlap on large displays
+    var scale = (mFieldHeight / 200.0).toNumber();
+    if (scale < 0.75) {
+      scale = 0.75;
+    }
+    if (scale > 2.0) {
+      scale = 2.0;
+    }
+    var labelCharPx = (7 * scale).toNumber();
+    var timeCharPx = (10 * scale).toNumber();
+    var labelWidth = (label.length() * labelCharPx).toNumber();
+    var timeWidth = (time.length() * timeCharPx).toNumber();
+    var spacing = (30 * scale).toNumber(); // Space between label and time
     var totalWidth = labelWidth + spacing + timeWidth;
 
     // Center the entire label+time group within the screen
