@@ -10,6 +10,9 @@ class ActivityDataValidator {
   // Validation state
   private var mGpsQualityGood as Lang.Boolean = false;
   private var mMinDistanceReached as Lang.Boolean = false;
+  // Treadmill / indoor profile: distance comes from the wrist or a footpod,
+  // so there is no GPS fix to wait for
+  private var mIndoor as Lang.Boolean = false;
 
   // Configuration
   private var mMinPredictionDistance as Lang.Number;
@@ -36,8 +39,20 @@ class ActivityDataValidator {
    * @param info Activity info with GPS data
    * @return true if GPS quality is acceptable
    */
+  public function setIndoor(indoor as Lang.Boolean) as Void {
+    mIndoor = indoor;
+  }
+
   public function validateGpsData(info as Activity.Info) as Lang.Boolean {
-    var accuracy = info.currentLocationAccuracy;
+    return validateAccuracy(info.currentLocationAccuracy);
+  }
+
+  // Split out of validateGpsData so it can be unit tested
+  public function validateAccuracy(accuracy as Position.Quality?) as Lang.Boolean {
+    if (mIndoor) {
+      mGpsQualityGood = true;
+      return true;
+    }
 
     // If accuracy is null, assume GPS is good (some devices don't report this)
     if (accuracy == null) {

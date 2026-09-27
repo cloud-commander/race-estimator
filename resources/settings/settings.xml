@@ -10,6 +10,40 @@
             <listEntry value="6">@Strings.Race262K</listEntry>
             <listEntry value="7">@Strings.RaceMarathon</listEntry>
             <listEntry value="8">@Strings.Race50K</listEntry>
+            <listEntry value="9">@Strings.RaceCustom</listEntry>
         </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.customDistanceKm" title="@Strings.CustomDistanceTitle" prompt="@Strings.CustomDistancePrompt">
+        <settingConfig type="numeric" min="1" max="250" />
+    </setting>
+    <setting propertyKey="@Properties.goalHours" title="@Strings.GoalHoursTitle" prompt="@Strings.GoalPrompt">
+        <settingConfig type="numeric" min="0" max="23" />
+    </setting>
+    <setting propertyKey="@Properties.goalMinutes" title="@Strings.GoalMinutesTitle" prompt="@Strings.GoalPrompt">
+        <settingConfig type="numeric" min="0" max="59" />
+    </setting>
+    <setting propertyKey="@Properties.fuelInterval" title="@Strings.FuelTitle">
+        <settingConfig type="list">
+            <listEntry value="-1">@Strings.FuelAuto</listEntry>
+            <listEntry value="0">@Strings.FuelOff</listEntry>
+            <listEntry value="20">@Strings.Fuel20</listEntry>
+            <listEntry value="30">@Strings.Fuel30</listEntry>
+            <listEntry value="40">@Strings.Fuel40</listEntry>
+            <listEntry value="45">@Strings.Fuel45</listEntry>
+            <listEntry value="60">@Strings.Fuel60</listEntry>
+        </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.coachAlerts" title="@Strings.AlertsTitle">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.AlertsOff</listEntry>
+            <listEntry value="1">@Strings.AlertsWarnings</listEntry>
+            <listEntry value="2">@Strings.AlertsAll</listEntry>
+        </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.lapSync" title="@Strings.LapSyncTitle" prompt="@Strings.LapSyncPrompt">
+        <settingConfig type="boolean" />
+    </setting>
+    <setting propertyKey="@Properties.resetHighScores" title="@Strings.ResetHighScoresTitle">
+        <settingConfig type="boolean" />
     </setting>
 </settings>

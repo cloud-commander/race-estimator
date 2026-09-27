@@ -18,6 +18,28 @@ class MilestoneManager {
   // Celebration tracking
   private var mCelebrationStartTimeMs as Lang.Number? = null;
   private var mCelebrationMilestoneIdx as Lang.Number? = null;
+  // Milestone crossed live on the last check, until consumed (high scores)
+  private var mLiveCrossingIdx as Lang.Number? = null;
+  // Milestone that gets the long fanfare (the target race)
+  private var mFanfareIdx as Lang.Number = -1;
+
+  // Standard race distances (cm); the target-race setting indexes these
+  public static const STANDARD_CM = [
+    500000, // 5K
+    804672, // 5 miles
+    1000000, // 10K
+    1310000, // 13.1K
+    1609344, // 10 miles
+    2109750, // Half marathon
+    2620000, // 26.2K
+    4219500, // Full marathon
+    5000000, // 50K
+  ];
+  private const STANDARD_LABELS = [
+    "5K", "5 MI", "10K", "13.1K", "10 MI", "HALF", "26.2K", "MARATHON", "50K",
+  ];
+  // A custom distance this close to a standard one is that one
+  private const SAME_DISTANCE_CM = 5000;
 
   // Constants
   private const CELEBRATION_DURATION_MS = 10000; // Long enough to glance at
@@ -45,46 +67,18 @@ class MilestoneManager {
     mDisplayRowCount = displayRowCount;
     mDebugLogging = debugLogging;
 
-    // Define standard race distances in centimeters
-    // 5K, 5MI, 10K, 13.1K, 10MI, HM, 26.2K, FM, 50K
-    mDistancesCm =
-      [
-        500000, // 5K
-        804672, // 5 miles
-        1000000, // 10K
-        1310000, // 13.1K
-        1609344, // 10 miles
-        2109750, // Half marathon
-        2620000, // 26.2K
-        4219500, // Full marathon
-        5000000, // 50K
-      ] as Lang.Array<Lang.Number>;
-
-    mLabels =
-      [
-        "5K",
-        "5 MI",
-        "10K",
-        "13.1K",
-        "10 MI",
-        "HALF",
-        "26.2K",
-        "MARATHON",
-        "50K",
-      ] as
-      Lang.Array<Lang.String>;
-
-    // Initialize completion tracking
-    mFinishTimesMs = new Lang.Array<Lang.Number?>[mMilestoneCount];
-    for (var i = 0; i < mMilestoneCount; i++) {
-      mFinishTimesMs[i] = null;
-    }
-
-    // Initialize display to show first N milestones
+    // Display window of the first N milestones
     mDisplayIndices = new Lang.Array<Lang.Number?>[mDisplayRowCount];
     for (var i = 0; i < mDisplayRowCount; i++) {
       mDisplayIndices[i] = i;
     }
+
+    // Standard distances (milestoneCount is kept for API compatibility;
+    // the list is STANDARD_CM plus an optional custom distance)
+    mDistancesCm = [] as Lang.Array<Lang.Number>;
+    mLabels = [] as Lang.Array<Lang.String>;
+    mFinishTimesMs = [] as Lang.Array<Lang.Number?>;
+    configure(0);
 
     if (mDebugLogging) {
       System.println(
@@ -100,6 +94,78 @@ class MilestoneManager {
           "]"
       );
     }
+  }
+
+  /**
+   * Build the milestone list: the standard distances plus an optional custom
+   * one (cm, 0 = none) inserted in order. Finish times already recorded are
+   * kept (matched by distance), so this is safe mid-run.
+   */
+  public function configure(customCm as Lang.Number) as Void {
+    var distances = [] as Lang.Array<Lang.Number>;
+    var labels = [] as Lang.Array<Lang.String>;
+    var customPending = customCm > 0;
+    for (var i = 0; i < STANDARD_CM.size(); i++) {
+      var std = STANDARD_CM[i] as Lang.Number;
+      if (customPending) {
+        var diff = customCm - std;
+        if (diff < SAME_DISTANCE_CM && diff > -SAME_DISTANCE_CM) {
+          customPending = false; // same as a standard distance
+        } else if (customCm < std) {
+          distances.add(customCm);
+          labels.add(customLabel(customCm));
+          customPending = false;
+        }
+      }
+      distances.add(std);
+      labels.add(STANDARD_LABELS[i] as Lang.String);
+    }
+    if (customPending) {
+      distances.add(customCm);
+      labels.add(customLabel(customCm));
+    }
+
+    var times = new Lang.Array<Lang.Number?>[distances.size()];
+    for (var i = 0; i < distances.size(); i++) {
+      var old = mDistancesCm.indexOf(distances[i]);
+      times[i] = old >= 0 ? mFinishTimesMs[old] : null;
+    }
+    mDistancesCm = distances;
+    mLabels = labels;
+    mFinishTimesMs = times;
+    mMilestoneCount = distances.size();
+    rebuildDisplay();
+  }
+
+  // "15K", "15.5K", "100K"
+  private function customLabel(cm as Lang.Number) as Lang.String {
+    var tenths = (cm + 5000) / 10000; // 0.1 km
+    return tenths % 10 == 0
+      ? (tenths / 10) + "K"
+      : (tenths / 10) + "." + (tenths % 10) + "K";
+  }
+
+  // Index of the milestone at distanceCm (within SAME_DISTANCE_CM), or -1
+  public function indexOfDistance(distanceCm as Lang.Number) as Lang.Number {
+    for (var i = 0; i < mMilestoneCount; i++) {
+      var diff = mDistancesCm[i] - distanceCm;
+      if (diff < SAME_DISTANCE_CM && diff > -SAME_DISTANCE_CM) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // Milestone that plays the long fanfare (the target race)
+  public function setFanfareIdx(idx as Lang.Number) as Void {
+    mFanfareIdx = idx;
+  }
+
+  // Milestone crossed live since the last call, or null (one-shot)
+  public function consumeLiveCrossing() as Lang.Number? {
+    var idx = mLiveCrossingIdx;
+    mLiveCrossingIdx = null;
+    return idx;
   }
 
   /**
@@ -255,7 +321,8 @@ class MilestoneManager {
     if (celebrateIdx != null) {
       mCelebrationStartTimeMs = timerTimeMs;
       mCelebrationMilestoneIdx = celebrateIdx;
-      playFeedback(celebrateIdx == mMilestoneCount - 1);
+      mLiveCrossingIdx = celebrateIdx;
+      playFeedback(celebrateIdx == mFanfareIdx || celebrateIdx == mMilestoneCount - 1);
     }
 
     // Check if celebration period has ended
@@ -359,6 +426,7 @@ class MilestoneManager {
     // Clear celebration state
     mCelebrationStartTimeMs = null;
     mCelebrationMilestoneIdx = null;
+    mLiveCrossingIdx = null;
   }
 
   /**
@@ -431,7 +499,7 @@ class MilestoneManager {
     // Mark completion
     mFinishTimesMs[idx] = timeMs;
 
-    playFeedback(idx == mMilestoneCount - 1);
+    playFeedback(idx == mFanfareIdx || idx == mMilestoneCount - 1);
 
     if (mDebugLogging) {
       System.println(

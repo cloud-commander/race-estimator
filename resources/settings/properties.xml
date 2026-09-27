@@ -1,5 +1,18 @@
 <properties>
-    <!-- Milestone index of the race being run (0=5K ... 7=Marathon, 8=50K).
+    <!-- Race being run (0=5K ... 7=Marathon, 8=50K, 9=custom distance).
          Drives the level-map arc and the head/legs/heart phase messages. -->
     <property id="targetRace" type="number">7</property>
+    <!-- Goal finish time for the target race; 0:00 = no goal -->
+    <property id="goalHours" type="number">0</property>
+    <property id="goalMinutes" type="number">0</property>
+    <!-- Fuel reminder minutes: -1 = auto (40 min on half marathon+), 0 = off -->
+    <property id="fuelInterval" type="number">-1</property>
+    <!-- Target distance when targetRace = 9 (km) -->
+    <property id="customDistanceKm" type="float">15.0</property>
+    <!-- Buzz on coach messages: 0 off, 1 warnings only, 2 all -->
+    <property id="coachAlerts" type="number">1</property>
+    <!-- Lap button at a km / mile marker syncs distance to it -->
+    <property id="lapSync" type="boolean">false</property>
+    <!-- One-shot: clears the high-score table, then resets itself -->
+    <property id="resetHighScores" type="boolean">false</property>
 </properties>

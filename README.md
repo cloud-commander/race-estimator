@@ -54,6 +54,31 @@ macOS
   5. Eject the device from OpenMTP and unplug the cable.
   6. On the watch, add the data field to an activity screen (Settings → Activities & Apps → choose activity → Data Screens → Add).
 
+### Settings
+
+Set in Garmin Connect (phone) or Connect IQ → the data field → Settings:
+
+| Setting | Default | What it does |
+|---|---|---|
+| Target race | Marathon | Sets the level-map arc, race thirds and "boss" stage. *Custom distance* adds your own milestone (1–250 km) |
+| Custom distance (km) | 15 | Used when Target race is Custom distance |
+| Goal time (hours, minutes) | 0:00 (off) | Coach compares projected finish with the goal once per stage ("1:20 UNDER GOAL") and flags a start that is too fast for it |
+| Fuel reminders | Auto | Auto = every 40 min on half marathon and longer; Off; or every 20–60 min on any race |
+| Coach vibration | Warnings only | Buzz on coach messages: off, warnings only, or all |
+| Lap button syncs to course markers | Off | Press lap at an official km / mile sign to correct GPS distance from there on (auto-lap is ignored) |
+| Reset high scores | Off | Clears the high-score table and ghost, then switches itself back off |
+
+### Features
+
+- **Attract mode**: before you start, the arc runs a chase with READY / PRESS START, your hi-score and goal; "GO!" when the timer starts.
+- **Level map**: the arc is the target race in thirds, with milestone pips, a boss pip and a player marker.
+- **Pace model**: grade-adjusted recent pace blended with the run average; a wall fade past 30 km only.
+- **Coach**: race segmentation, pace, hill, goal and fuel cues (see `source/CoachManager.mc`).
+- **High scores and ghost**: best time per distance. When the target is a new best, its splits become the ghost you race next time ("GHOST -0:40" at each milestone).
+- **Results screen**: stop the timer after the target to see NEW HIGH SCORE / GOAL CLEAR / GAME OVER, the goal margin, previous best and max combo.
+- **Garmin Connect charts**: projected finish is recorded every second; target time and goal margin go in the activity summary.
+- **Indoor**: treadmill / indoor profiles skip the GPS gate and ignore altitude.
+
 Command-line (when device is mounted at `/Volumes/GARMIN`):
 
 ```bash

@@ -10,3 +10,8 @@ build/external-mir/
 build/internal-mir/
 *.prg.debug.xml
 build/*-settings.json
+
+# Raw activity files (GPS tracks); use tools/fit_to_replay.py for fixtures
+*.fit
+*.FIT
+__pycache__/
