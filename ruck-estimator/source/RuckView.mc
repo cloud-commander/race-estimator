@@ -903,7 +903,8 @@ class RuckView extends WatchUi.DataField {
     }
   }
 
-  // Arcade title: ink over a one-dot accent drop shadow
+  // Arcade title: ink inside a solid accent outline, half a dot thick (the
+  // text is stamped at the 8 neighbouring offsets, then ink on top)
   private function drawTitle(
     dc as Graphics.Dc,
     x as Lang.Number,
@@ -911,8 +912,17 @@ class RuckView extends WatchUi.DataField {
     font as Graphics.FontType,
     text as Lang.String
   ) as Void {
-    var dot = dc.getFontHeight(font) / 7;
-    drawText(dc, x + dot, y + dot, font, mAccent, text);
+    var o = dc.getFontHeight(font) / 14;
+    if (o < 1) {
+      o = 1;
+    }
+    for (var i = -1; i <= 1; i++) {
+      for (var j = -1; j <= 1; j++) {
+        if (i != 0 || j != 0) {
+          drawText(dc, x + i * o, y + j * o, font, mAccent, text);
+        }
+      }
+    }
     drawText(dc, x, y, font, mInk, text);
   }
 
