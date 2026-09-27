@@ -9,3 +9,4 @@ build/gen/
 build/external-mir/
 build/internal-mir/
 *.prg.debug.xml
+build/*-settings.json

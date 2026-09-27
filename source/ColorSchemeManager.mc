@@ -32,7 +32,7 @@ class ColorSchemeManager {
   private const A_TITLE = 0xAAAA00;
   private const A_STATUS = 0xAA00AA;
   private const A_PROGRESS = 0x00AA00;
-  private const A_TRACK = 0x000055;
+  private const A_TRACK = 0x0000AA; // dim blue: future pips must stay visible
 
   private var mBackground as Lang.Number = Graphics.COLOR_BLACK;
   private var mValue as Lang.Number = D_VALUE;

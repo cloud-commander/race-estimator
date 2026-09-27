@@ -1,0 +1,15 @@
+<settings>
+    <setting propertyKey="@Properties.targetRace" title="@Strings.TargetRaceTitle">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.Race5K</listEntry>
+            <listEntry value="1">@Strings.Race5Mi</listEntry>
+            <listEntry value="2">@Strings.Race10K</listEntry>
+            <listEntry value="3">@Strings.Race131K</listEntry>
+            <listEntry value="4">@Strings.Race10Mi</listEntry>
+            <listEntry value="5">@Strings.RaceHalf</listEntry>
+            <listEntry value="6">@Strings.Race262K</listEntry>
+            <listEntry value="7">@Strings.RaceMarathon</listEntry>
+            <listEntry value="8">@Strings.Race50K</listEntry>
+        </settingConfig>
+    </setting>
+</settings>

@@ -1,3 +1,4 @@
+using Toybox.Application;
 using Toybox.Lang;
 using Toybox.Activity;
 using Toybox.System;
@@ -27,11 +28,11 @@ class RaceEstimatorView extends WatchUi.DataField {
   private const DEBUG_LOGGING = false;
 
   // Full-screen layout (fractions of field height; text vertically centred)
-  private const FS_TITLE_Y = 0.23;
+  private const FS_TITLE_Y = 0.25;
   private const FS_HERO_Y = 0.40;
-  private const FS_SUB_Y = 0.56;
-  private const FS_ROW1_Y = 0.67;
-  private const FS_ROW2_Y = 0.77;
+  private const FS_SUB_Y = 0.545;
+  private const FS_ROW1_Y = 0.625;
+  private const FS_ROW2_Y = 0.71;
   private const FS_TITLE_MAX_H = 0.09;
   private const FS_HERO_MAX_H = 0.22;
   private const FS_HERO_MAX_W = 0.64;
@@ -98,6 +99,27 @@ class RaceEstimatorView extends WatchUi.DataField {
   // its segment; on arrival the actual time is compared ("0:42 AHEAD")
   private const SNAPSHOT_AT_PROGRESS = 0.5d;
   private var mSnapshotMs as Lang.Array<Lang.Number?>;
+
+  // Level map + race segmentation (target race from settings)
+  private const DEFAULT_TARGET_IDX = 7; // Marathon
+  private var mTargetIdx as Lang.Number = DEFAULT_TARGET_IDX;
+  private var mMapEndIdx as Lang.Number = DEFAULT_TARGET_IDX;
+  private var mMapFraction as Lang.Double = 0.0d;
+  private var mPhaseColors as Lang.Array<Lang.Number> = [0, 0, 0] as Lang.Array<Lang.Number>;
+
+  // Event-driven coaching messages (race thirds + micro-goals), one at a
+  // time, each shown for MESSAGE_DURATION_SEC on the context line
+  private const MESSAGE_DURATION_SEC = 8.0d;
+  private const HALFWAY_MIN_SEGMENT_M = 2000.0d;
+  private const FINAL_PUSH_M = 400.0d;
+  private const MSG_HALFWAY = 1;
+  private const MSG_FINAL_PUSH = 2;
+  private var mMessage as Lang.String = "";
+  private var mMessageUntilSec as Lang.Double = 0.0d;
+  private var mPhaseAnnounced as Lang.Number = 0; // phases announced so far
+  private var mMessageSegment as Lang.Number = -1; // segment the flags belong to
+  private var mSegmentFlags as Lang.Number = 0;
+  private var mBonusAnnounced as Lang.Boolean = false;
   private var mSplitText as Lang.String = "";
   private var mSplitAhead as Lang.Boolean = true;
   private var mSplitShownFor as Lang.Number = -1;
@@ -161,9 +183,24 @@ class RaceEstimatorView extends WatchUi.DataField {
     mColorScheme = new ColorSchemeManager(mIsAmoled, DEBUG_LOGGING);
     mArc = new ProgressArcDrawer(mIsAmoled);
     mSnapshotMs = new Lang.Array<Lang.Number?>[MILESTONE_COUNT];
+    loadSettings();
 
     loadFromStorage();
     mSubText = "GET READY";
+  }
+
+  // Called at start and from the app's onSettingsChanged
+  function loadSettings() as Void {
+    var target = null;
+    try {
+      target = Application.Properties.getValue("targetRace");
+    } catch (ex) {
+      target = null;
+    }
+    mTargetIdx =
+      target instanceof Lang.Number && target >= 0 && target < MILESTONE_COUNT
+        ? target
+        : DEFAULT_TARGET_IDX;
   }
 
   // ---------------------------------------------------------------- compute
@@ -288,7 +325,99 @@ class RaceEstimatorView extends WatchUi.DataField {
       }
     }
 
+    updateMap(elapsedDistance);
+    if (canPredict) {
+      updateMessages(timerTimeMs / 1000.0d, elapsedDistance);
+    }
     updateSegmentAndSubline(elapsedDistance, gpsOk, canPredict);
+  }
+
+  // Map spans 0 -> target race; once the target is cleared it extends to the
+  // next milestone ("bonus stage")
+  private function updateMap(elapsedDistance as Lang.Float) as Void {
+    var next = mMilestones.getNextMilestoneIdx();
+    mMapEndIdx = next > mTargetIdx ? next : mTargetIdx;
+    if (mMapEndIdx >= MILESTONE_COUNT) {
+      mMapEndIdx = MILESTONE_COUNT - 1;
+    }
+    var endM = mMilestones.getMilestoneDistanceCm(mMapEndIdx) / 100.0d;
+    mMapFraction = elapsedDistance / endM;
+    if (mMapFraction > 1.0d) {
+      mMapFraction = 1.0d;
+    }
+  }
+
+  // Segmentation coaching. Thirds of the target race (head / legs / heart)
+  // plus micro-goal cues inside each stage. Only fires on events, never on a
+  // timer, and never over a celebration or status.
+  private function updateMessages(
+    nowSec as Lang.Double,
+    elapsedDistance as Lang.Float
+  ) as Void {
+    if (nowSec < mMessageUntilSec) {
+      return; // one message at a time
+    }
+    mMessage = "";
+
+    var next = mMilestones.getNextMilestoneIdx();
+    if (next >= MILESTONE_COUNT || mMilestones.isCelebrating()) {
+      return;
+    }
+
+    // New stage: reset its cues and announce it (not at the very start)
+    if (next != mMessageSegment) {
+      var announce = mMessageSegment >= 0;
+      mMessageSegment = next;
+      mSegmentFlags = 0;
+      if (next > mTargetIdx && !mBonusAnnounced) {
+        mBonusAnnounced = true;
+        showMessage("BONUS STAGE!", nowSec);
+        return;
+      }
+      if (announce) {
+        showMessage("NEXT: " + mMilestones.getMilestoneLabel(next), nowSec);
+        return;
+      }
+    }
+
+    // Race thirds, only while inside the target race
+    if (next <= mTargetIdx) {
+      var phase = mMapFraction < 1.0d / 3 ? 0 : mMapFraction < 2.0d / 3 ? 1 : 2;
+      if (mPhaseAnnounced <= phase) {
+        mPhaseAnnounced = phase + 1;
+        showMessage(
+          phase == 0
+            ? "PHASE 1: HOLD BACK"
+            : phase == 1 ? "PHASE 2: RHYTHM" : "PHASE 3: DIG DEEP",
+          nowSec
+        );
+        return;
+      }
+    }
+
+    var nextM = mMilestones.getMilestoneDistanceCm(next) / 100.0d;
+    var prevM =
+      next > 0 ? mMilestones.getMilestoneDistanceCm(next - 1) / 100.0d : 0.0d;
+    var remainingM = nextM - elapsedDistance;
+
+    if ((mSegmentFlags & MSG_FINAL_PUSH) == 0 && remainingM <= FINAL_PUSH_M) {
+      mSegmentFlags |= MSG_FINAL_PUSH | MSG_HALFWAY;
+      showMessage("FINAL PUSH!", nowSec);
+      return;
+    }
+    if (
+      (mSegmentFlags & MSG_HALFWAY) == 0 &&
+      nextM - prevM >= HALFWAY_MIN_SEGMENT_M &&
+      mSegmentProgress >= 0.5d
+    ) {
+      mSegmentFlags |= MSG_HALFWAY;
+      showMessage("HALFWAY TO " + mMilestones.getMilestoneLabel(next), nowSec);
+    }
+  }
+
+  private function showMessage(text as Lang.String, nowSec as Lang.Double) as Void {
+    mMessage = text;
+    mMessageUntilSec = nowSec + MESSAGE_DURATION_SEC;
   }
 
   // Gauge fill and the one-line context under the hero:
@@ -317,11 +446,19 @@ class RaceEstimatorView extends WatchUi.DataField {
 
     if (mMilestones.isCelebrating()) {
       updateSplitText();
-      setStatus("STAGE CLEAR!");
+      setStatus(
+        mMilestones.getCelebrationMilestoneIdx() == mTargetIdx
+          ? "TARGET CLEAR!"
+          : "STAGE CLEAR!"
+      );
       return;
     }
     if (!gpsOk) {
       setStatus("WAITING FOR GPS");
+      return;
+    }
+    if (mMessage.length() > 0) {
+      setStatus(mMessage);
       return;
     }
 
@@ -546,20 +683,8 @@ class RaceEstimatorView extends WatchUi.DataField {
   //                  HALF ........ 1:46:20     <- hi-score table
   //                  MARATHON .... 3:44:05
   private function drawFullScreen(dc as Graphics.Dc, focus as Lang.Number) as Void {
-    var gaugeProgress =
-      mMilestones.isCelebrating() || mMilestones.isAllComplete()
-        ? 1.0d
-        : mSegmentProgress;
     var celebrating = mMilestones.isCelebrating();
-    mArc.draw(
-      dc,
-      gaugeProgress,
-      mColorScheme.getProgressColor(),
-      mColorScheme.getTrackColor(),
-      mOx,
-      mOy,
-      celebrating ? mPhase : -1
-    );
+    drawLevelMap(dc, celebrating);
 
     drawTitle(dc, focus);
     drawHero(dc, focus);
@@ -570,6 +695,57 @@ class RaceEstimatorView extends WatchUi.DataField {
     var right = mCenterX + mTableHalfWidth + mOx;
     drawTableRow(dc, mTableIdx[0], mRow1Y + mOy, left, right);
     drawTableRow(dc, mTableIdx[1], mRow2Y + mOy, left, right);
+  }
+
+  // Arc = level map of the target race: travelled blocks in phase colours,
+  // milestone pips (cleared / next, blinking / future), boss pip at the end,
+  // player marker at the current distance
+  private function drawLevelMap(dc as Graphics.Dc, celebrating as Lang.Boolean) as Void {
+    mPhaseColors[0] = mColorScheme.getLabelColor();
+    mPhaseColors[1] = mColorScheme.getProgressColor();
+    mPhaseColors[2] = mColorScheme.getTitleColor();
+    mArc.draw(
+      dc,
+      mMapFraction,
+      mPhaseColors,
+      mColorScheme.getTrackColor(),
+      mOx,
+      mOy,
+      celebrating ? mPhase : -1
+    );
+
+    var endCm = mMilestones.getMilestoneDistanceCm(mMapEndIdx).toDouble();
+    var next = mMilestones.getNextMilestoneIdx();
+    for (var i = 0; i <= mMapEndIdx; i++) {
+      var color = mColorScheme.getTrackColor();
+      if (i < next) {
+        color = mColorScheme.getProgressColor();
+      } else if (i == next) {
+        if (mPhase == 1 && !celebrating) {
+          continue; // next pip blinks at 1 Hz
+        }
+        color = mColorScheme.getTitleColor();
+      } else if (i == mMapEndIdx) {
+        color = mColorScheme.getStatusColor(); // boss
+      }
+      mArc.drawPip(
+        dc,
+        mMilestones.getMilestoneDistanceCm(i) / endCm,
+        color,
+        i == mMapEndIdx,
+        mOx,
+        mOy
+      );
+    }
+
+    mArc.drawPlayer(
+      dc,
+      mMapFraction,
+      mColorScheme.getValueColor(),
+      mColorScheme.getBackgroundColor(),
+      mOx,
+      mOy
+    );
   }
 
   // Context line. While celebrating it alternates each second between
@@ -760,6 +936,13 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
     mSplitShownFor = -1;
     mSplitText = "";
+    mMapFraction = 0.0d;
+    mMessage = "";
+    mMessageUntilSec = 0.0d;
+    mPhaseAnnounced = 0;
+    mMessageSegment = -1;
+    mSegmentFlags = 0;
+    mBonusAnnounced = false;
   }
 
   function onTimerPause() as Void {

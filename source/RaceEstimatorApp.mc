@@ -15,6 +15,14 @@ class RaceEstimatorApp extends Application.AppBase {
   // onStop() is called when your application is exiting
   function onStop(state as Lang.Dictionary?) as Void {}
 
+  // Target race changed in Garmin Connect
+  function onSettingsChanged() as Void {
+    if (mView != null) {
+      mView.loadSettings();
+    }
+    WatchUi.requestUpdate();
+  }
+
   //! Return the initial view of your application here
   function getInitialView() {
     mView = new RaceEstimatorView();

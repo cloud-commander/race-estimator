@@ -1,0 +1,5 @@
+<properties>
+    <!-- Milestone index of the race being run (0=5K ... 7=Marathon, 8=50K).
+         Drives the level-map arc and the head/legs/heart phase messages. -->
+    <property id="targetRace" type="number">7</property>
+</properties>

@@ -1,4 +1,14 @@
 <strings>
     <string id="AppName">RaceEstimator</string>
     <string id="label">RACE EST</string>
+    <string id="TargetRaceTitle">Target race</string>
+    <string id="Race5K">5K</string>
+    <string id="Race5Mi">5 miles</string>
+    <string id="Race10K">10K</string>
+    <string id="Race131K">13.1K</string>
+    <string id="Race10Mi">10 miles</string>
+    <string id="RaceHalf">Half marathon</string>
+    <string id="Race262K">26.2K</string>
+    <string id="RaceMarathon">Marathon</string>
+    <string id="Race50K">50K</string>
 </strings>
