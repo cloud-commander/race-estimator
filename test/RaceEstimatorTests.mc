@@ -14,7 +14,7 @@ function testDisplayWindowAdvancesAndClampsAtEnd(logger as Test.Logger) as Lang.
   Test.assert(d[0] == 0);
   Test.assert(d[1] == 1);
   // Celebration over: window starts at next milestone
-  m.checkAndMarkCompletions(500100.0d, 1506000, 500);
+  m.checkAndMarkCompletions(500100.0d, 1511000, 500);
   m.rebuildDisplay();
   d = m.getDisplayIndices();
   Test.assert(d[0] == 1);
@@ -72,10 +72,10 @@ function testFocusFollowsCelebrationThenNext(logger as Test.Logger) as Lang.Bool
   Test.assertEqual(m.getFocusIdx(), 0);
   m.checkAndMarkCompletions(500000.0d, 1500000, 500);
   Test.assertEqual(m.getFocusIdx(), 0); // celebrating 5K
-  m.checkAndMarkCompletions(500100.0d, 1506000, 500);
+  m.checkAndMarkCompletions(500100.0d, 1511000, 500);
   Test.assertEqual(m.getFocusIdx(), 1); // next: 5 MI
   m.checkAndMarkCompletions(5000000.0d, 18000000, 500);
-  m.checkAndMarkCompletions(5000100.0d, 18006000, 500);
+  m.checkAndMarkCompletions(5000100.0d, 18011000, 500);
   Test.assertEqual(m.getFocusIdx(), 8); // all done: last
   return true;
 }
@@ -92,5 +92,31 @@ function testPersistenceRoundTripWithoutThrottle(logger as Test.Logger) as Lang.
   Test.assert(loaded != null);
   Test.assert((loaded as Lang.Array<Lang.Number?>)[1] == 2400000);
   p.clearStorage();
+  return true;
+}
+
+(:test)
+function testLateStartEstimatesSplitsWithoutCelebrating(logger as Test.Logger) as Lang.Boolean {
+  var m = new MilestoneManager(9, 3, false);
+  // Field first sees the run at 12 km / 60 min: 5K, 5 MI, 10K were not
+  // crossed live, so splits are estimated at average pace, no celebration
+  m.checkAndMarkCompletions(1200000.0d, 3600000, 500);
+  Test.assert(m.getMilestoneFinishTime(0) == 1500000); // 5/12 of 60 min
+  Test.assert(m.getMilestoneFinishTime(2) == 3000000);
+  Test.assert(!m.isCelebrating());
+  Test.assertEqual(m.getNextMilestoneIdx(), 3);
+  return true;
+}
+
+(:test)
+function testCrossingLiveCelebratesOnce(logger as Test.Logger) as Lang.Boolean {
+  var m = new MilestoneManager(9, 3, false);
+  m.checkAndMarkCompletions(499600.0d, 1500000, 500); // within tolerance
+  Test.assert(m.isCelebrating());
+  Test.assert(m.getCelebrationMilestoneIdx() == 0);
+  m.checkAndMarkCompletions(505000.0d, 1509000, 500);
+  Test.assert(m.isCelebrating()); // still within 10 s
+  m.checkAndMarkCompletions(510000.0d, 1510000, 500);
+  Test.assert(!m.isCelebrating());
   return true;
 }

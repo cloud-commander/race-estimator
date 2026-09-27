@@ -49,30 +49,29 @@ class ProgressArcDrawer {
   }
 
   // progress: 0.0 (just passed previous milestone) .. 1.0 (at next milestone)
+  // marqueePhase: -1 for normal, 0/1 to light alternate segments (arcade
+  // chase lights while celebrating; flipped once a second by the caller)
   function draw(
     dc as Graphics.Dc,
     progress as Lang.Double,
     progressColor as Lang.Number,
     trackColor as Lang.Number,
     offsetX as Lang.Number,
-    offsetY as Lang.Number
+    offsetY as Lang.Number,
+    marqueePhase as Lang.Number
   ) as Void {
     var cx = mCenterX + offsetX;
     var cy = mCenterY + offsetY;
     var lit = (progress * SEGMENTS).toNumber();
-    if (lit > SEGMENTS) {
-      lit = SEGMENTS;
-    }
 
     dc.setPenWidth(mPenWidth);
-    dc.setColor(progressColor, Graphics.COLOR_TRANSPARENT);
     for (var i = 0; i < SEGMENTS; i++) {
-      if (i == lit) {
-        if (mIsAmoled) {
-          break;
-        }
-        dc.setColor(trackColor, Graphics.COLOR_TRANSPARENT);
+      var on = marqueePhase >= 0 ? i % 2 == marqueePhase : i < lit;
+      // AMOLED: unlit segments are not drawn at all
+      if (!on && mIsAmoled) {
+        continue;
       }
+      dc.setColor(on ? progressColor : trackColor, Graphics.COLOR_TRANSPARENT);
       var start = GAUGE_START_DEGREES - i * PITCH_DEGREES;
       dc.drawArc(
         cx,

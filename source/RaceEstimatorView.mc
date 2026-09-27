@@ -93,6 +93,14 @@ class RaceEstimatorView extends WatchUi.DataField {
   // Per-second derived state shown by onUpdate
   private var mSubText as Lang.String = "";
   private var mSubIsStatus as Lang.Boolean = true;
+
+  // Split scoring: each milestone's projection is snapshotted halfway through
+  // its segment; on arrival the actual time is compared ("0:42 AHEAD")
+  private const SNAPSHOT_AT_PROGRESS = 0.5d;
+  private var mSnapshotMs as Lang.Array<Lang.Number?>;
+  private var mSplitText as Lang.String = "";
+  private var mSplitAhead as Lang.Boolean = true;
+  private var mSplitShownFor as Lang.Number = -1;
   private var mSegmentProgress as Lang.Double = 0.0d;
 
   // Layout (computed in onLayout)
@@ -122,6 +130,7 @@ class RaceEstimatorView extends WatchUi.DataField {
   private var mTableIdx as Lang.Array<Lang.Number> = [0, 0] as Lang.Array<Lang.Number>;
 
   private var mLastKnownBackground as Lang.Number = -1;
+  private var mPhase as Lang.Number = 0;
 
   function initialize() {
     DataField.initialize();
@@ -151,6 +160,7 @@ class RaceEstimatorView extends WatchUi.DataField {
     );
     mColorScheme = new ColorSchemeManager(mIsAmoled, DEBUG_LOGGING);
     mArc = new ProgressArcDrawer(mIsAmoled);
+    mSnapshotMs = new Lang.Array<Lang.Number?>[MILESTONE_COUNT];
 
     loadFromStorage();
     mSubText = "GET READY";
@@ -197,6 +207,14 @@ class RaceEstimatorView extends WatchUi.DataField {
       elapsedDistance == null ||
       elapsedDistance < MIN_DISTANCE_EPSILON
     ) {
+      return;
+    }
+
+    if (
+      info.timerState == Activity.TIMER_STATE_PAUSED ||
+      info.timerState == Activity.TIMER_STATE_STOPPED
+    ) {
+      setStatus("PAUSED");
       return;
     }
 
@@ -262,7 +280,17 @@ class RaceEstimatorView extends WatchUi.DataField {
           remainingM = 0.0d;
         }
         var projected = timerTimeMs + (remainingM * pace * 1000.0d).toNumber();
-        mTimes.setTime(i, projected > MAX_TIME_MS ? MAX_TIME_MS : projected);
+        if (projected > MAX_TIME_MS) {
+          projected = MAX_TIME_MS;
+        }
+        mTimes.setTime(i, projected);
+        if (
+          i == mMilestones.getNextMilestoneIdx() &&
+          mSnapshotMs[i] == null &&
+          mSegmentProgress >= SNAPSHOT_AT_PROGRESS
+        ) {
+          mSnapshotMs[i] = projected;
+        }
       } else {
         mTimes.setPending(i);
       }
@@ -298,6 +326,7 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
 
     if (mMilestones.isCelebrating()) {
+      updateSplitText();
       setStatus("STAGE CLEAR!");
       return;
     }
@@ -325,6 +354,27 @@ class RaceEstimatorView extends WatchUi.DataField {
       mSubText = distText + " IN " + formatDuration(remainingMs);
     }
     mSubIsStatus = false;
+  }
+
+  // Formats the celebrated milestone's result against its halfway projection,
+  // once per celebration
+  private function updateSplitText() as Void {
+    var idx = mMilestones.getCelebrationMilestoneIdx();
+    if (idx == null || idx == mSplitShownFor) {
+      return;
+    }
+    mSplitShownFor = idx;
+    mSplitText = "";
+    var predicted = mSnapshotMs[idx];
+    var actual = mMilestones.getMilestoneFinishTime(idx);
+    if (predicted == null || actual == null) {
+      return;
+    }
+    var delta = actual - predicted;
+    mSplitAhead = delta <= 0;
+    mSplitText =
+      formatDuration(delta < 0 ? -delta : delta) +
+      (mSplitAhead ? " AHEAD" : " BEHIND");
   }
 
   private function setStatus(text as Lang.String) as Void {
@@ -488,6 +538,10 @@ class RaceEstimatorView extends WatchUi.DataField {
     mOx = mBurnInProtection.getOffsetX();
     mOy = mBurnInProtection.getOffsetY();
 
+    // 1 Hz animation phase (data fields redraw once a second; nothing faster
+    // is needed or spent)
+    mPhase = (System.getTimer() / 1000) % 2;
+
     var focus = mMilestones.getFocusIdx();
     if (mIsFullScreen) {
       drawFullScreen(dc, focus);
@@ -506,35 +560,52 @@ class RaceEstimatorView extends WatchUi.DataField {
       mMilestones.isCelebrating() || mMilestones.isAllComplete()
         ? 1.0d
         : mSegmentProgress;
+    var celebrating = mMilestones.isCelebrating();
     mArc.draw(
       dc,
       gaugeProgress,
       mColorScheme.getProgressColor(),
       mColorScheme.getTrackColor(),
       mOx,
-      mOy
+      mOy,
+      celebrating ? mPhase : -1
     );
 
     drawTitle(dc, focus);
     drawHero(dc, focus);
-
-    dc.setColor(
-      mSubIsStatus ? mColorScheme.getStatusColor() : mColorScheme.getLabelColor(),
-      Graphics.COLOR_TRANSPARENT
-    );
-    dc.drawText(
-      mCenterX + mOx,
-      mSubY + mOy,
-      mSmallFont,
-      mSubText,
-      Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-    );
+    drawSubline(dc, celebrating);
 
     selectTableRows(focus);
     var left = mCenterX - mTableHalfWidth + mOx;
     var right = mCenterX + mTableHalfWidth + mOx;
     drawTableRow(dc, mTableIdx[0], mRow1Y + mOy, left, right);
     drawTableRow(dc, mTableIdx[1], mRow2Y + mOy, left, right);
+  }
+
+  // Context line. While celebrating it alternates each second between
+  // "STAGE CLEAR!" and the split result (or blinks if there is none).
+  private function drawSubline(dc as Graphics.Dc, celebrating as Lang.Boolean) as Void {
+    var text = mSubText;
+    var color = mSubIsStatus
+      ? mColorScheme.getStatusColor()
+      : mColorScheme.getLabelColor();
+    if (celebrating && mPhase == 1) {
+      if (mSplitText.length() == 0) {
+        return;
+      }
+      text = mSplitText;
+      color = mSplitAhead
+        ? mColorScheme.getProgressColor()
+        : mColorScheme.getStatusColor();
+    }
+    dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+    dc.drawText(
+      mCenterX + mOx,
+      mSubY + mOy,
+      mSmallFont,
+      text,
+      Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+    );
   }
 
   // Native-style single value: title on top, auto-sized number, and a
@@ -558,15 +629,17 @@ class RaceEstimatorView extends WatchUi.DataField {
         ? 1.0d
         : mSegmentProgress;
     var lit = (progress * CP_BAR_BLOCKS).toNumber();
+    var marquee = mMilestones.isCelebrating();
 
-    dc.setColor(mColorScheme.getProgressColor(), Graphics.COLOR_TRANSPARENT);
     for (var i = 0; i < CP_BAR_BLOCKS; i++) {
-      if (i == lit) {
-        if (mIsAmoled) {
-          break;
-        }
-        dc.setColor(mColorScheme.getTrackColor(), Graphics.COLOR_TRANSPARENT);
+      var on = marquee ? i % 2 == mPhase : i < lit;
+      if (!on && mIsAmoled) {
+        continue;
       }
+      dc.setColor(
+        on ? mColorScheme.getProgressColor() : mColorScheme.getTrackColor(),
+        Graphics.COLOR_TRANSPARENT
+      );
       dc.fillRectangle(x + i * pitch, y, block, barHeight);
     }
   }
@@ -692,6 +765,11 @@ class RaceEstimatorView extends WatchUi.DataField {
     mPersistence.clearStorage();
     mStateDirty = false;
     mSegmentProgress = 0.0d;
+    for (var i = 0; i < MILESTONE_COUNT; i++) {
+      mSnapshotMs[i] = null;
+    }
+    mSplitShownFor = -1;
+    mSplitText = "";
   }
 
   function onTimerPause() as Void {

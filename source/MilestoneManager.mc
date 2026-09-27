@@ -20,7 +20,11 @@ class MilestoneManager {
   private var mCelebrationMilestoneIdx as Lang.Number? = null;
 
   // Constants
-  private const CELEBRATION_DURATION_MS = 5000; // 5 seconds
+  private const CELEBRATION_DURATION_MS = 10000; // Long enough to glance at
+  // A milestone first seen more than this far behind was not crossed live
+  // (field restarted mid-run without saved state): its split is estimated
+  // and it is not celebrated
+  private const CATCH_UP_DISTANCE_CM = 20000; // 200 m
   private const CELEBRATION_TIMEOUT_MS = 30000; // 30 seconds max (safety)
 
   // Debug logging
@@ -218,31 +222,40 @@ class MilestoneManager {
 
     // Check every milestone (not just displayed rows) so a restored or
     // skipped-ahead state can never leave a reached milestone unmarked
+    var celebrateIdx = null;
     for (var idx = 0; idx < mMilestoneCount; idx++) {
+      var distanceCm = mDistancesCm[idx].toDouble();
       if (
-        mFinishTimesMs[idx] == null &&
-        currentDistanceCm >= mDistancesCm[idx].toDouble() - toleranceCm
+        mFinishTimesMs[idx] != null ||
+        currentDistanceCm < distanceCm - toleranceCm
       ) {
-        mFinishTimesMs[idx] = timerTimeMs;
-        vibrateForMilestone();
-
-        if (mDebugLogging) {
-          System.println(
-            "MilestoneManager: Milestone " +
-              idx +
-              " (" +
-              mLabels[idx] +
-              ") completed at " +
-              timerTimeMs +
-              "ms"
-          );
-        }
-
-        // Celebrate the furthest milestone reached this tick
-        mCelebrationStartTimeMs = timerTimeMs;
-        mCelebrationMilestoneIdx = idx;
-        needsRotation = true;
+        continue;
       }
+
+      if (currentDistanceCm - distanceCm > CATCH_UP_DISTANCE_CM) {
+        // Not crossed live: estimate the split at average pace, no fanfare
+        mFinishTimesMs[idx] = (
+          timerTimeMs.toDouble() * distanceCm / currentDistanceCm
+        ).toNumber();
+      } else {
+        mFinishTimesMs[idx] = timerTimeMs;
+        celebrateIdx = idx;
+      }
+      needsRotation = true;
+
+      if (mDebugLogging) {
+        System.println(
+          "MilestoneManager: Milestone " + mLabels[idx] + " at " +
+            mFinishTimesMs[idx] + "ms"
+        );
+      }
+    }
+
+    // One celebration per tick, for the furthest milestone crossed live
+    if (celebrateIdx != null) {
+      mCelebrationStartTimeMs = timerTimeMs;
+      mCelebrationMilestoneIdx = celebrateIdx;
+      playFeedback(celebrateIdx == mMilestoneCount - 1);
     }
 
     // Check if celebration period has ended
@@ -418,8 +431,7 @@ class MilestoneManager {
     // Mark completion
     mFinishTimesMs[idx] = timeMs;
 
-    // Vibrate for feedback
-    vibrateForMilestone();
+    playFeedback(idx == mMilestoneCount - 1);
 
     if (mDebugLogging) {
       System.println(
@@ -440,18 +452,42 @@ class MilestoneManager {
   }
 
   /**
-   * Vibrate to celebrate milestone completion
-   * Gracefully handles devices that don't support vibration
+   * Milestone feedback: vibration plus an 8-bit arpeggio (a longer fanfare
+   * for the final milestone). Both honour the watch's vibration/tone
+   * settings. These fire even when this data screen is not the one showing.
    */
-  private function vibrateForMilestone() as Void {
-    if (!(Attention has :vibrate) || !System.getDeviceSettings().vibrateOn) {
-      return;
+  private function playFeedback(isFinal as Lang.Boolean) as Void {
+    var settings = System.getDeviceSettings();
+
+    if ((Attention has :vibrate) && settings.vibrateOn) {
+      Attention.vibrate(
+        isFinal
+          ? [
+              new Attention.VibeProfile(100, 300),
+              new Attention.VibeProfile(0, 150),
+              new Attention.VibeProfile(100, 300),
+              new Attention.VibeProfile(0, 150),
+              new Attention.VibeProfile(100, 600),
+            ]
+          : [
+              new Attention.VibeProfile(100, 300),
+              new Attention.VibeProfile(0, 150),
+              new Attention.VibeProfile(100, 300),
+            ]
+      );
     }
-    // Two full-strength pulses: noticeable mid-stride (a 50ms/50% pulse is not)
-    Attention.vibrate([
-      new Attention.VibeProfile(100, 300),
-      new Attention.VibeProfile(0, 150),
-      new Attention.VibeProfile(100, 300),
-    ]);
+
+    if ((Attention has :playTone) && (Attention has :ToneProfile) && settings.tonesOn) {
+      // C5-E5-G5-C6 "stage clear"; final adds E6-G6 and a held C7
+      var notes = isFinal
+        ? [523, 659, 784, 1047, 1319, 1568, 2093]
+        : [523, 659, 784, 1047];
+      var profile = new Lang.Array<Attention.ToneProfile>[notes.size()];
+      for (var i = 0; i < notes.size(); i++) {
+        var last = i == notes.size() - 1;
+        profile[i] = new Attention.ToneProfile(notes[i], last ? 300 : 90);
+      }
+      Attention.playTone({ :toneProfile => profile });
+    }
   }
 }
