@@ -1,9 +1,12 @@
 using Toybox.Lang;
+using Toybox.Application;
 using Toybox.Application.Storage;
 using Toybox.System;
 
 // Manages persistent storage with validation and corruption detection
-// Handles save/load operations with checksum verification
+// Handles save/load operations with checksum verification.
+// Saves are only triggered by milestone events (a handful per activity), so
+// there is deliberately no throttle: a throttled save would silently drop state.
 class PersistenceManager {
 
   // Storage keys
@@ -14,56 +17,34 @@ class PersistenceManager {
   private const CHECKSUM_PRIME = 31;  // Standard hash prime
   private const MAX_FINISH_TIME_MS = 86400000;  // 24 hours max per milestone (sanity check)
 
-  // Persistence state
-  private var mLastSuccessfulSaveTimeMs as Lang.Number = 0;
-  private var mSaveIntervalMs as Lang.Number;
-
   // Debug logging
   private var mDebugLogging as Lang.Boolean = false;
 
   /**
    * Initialize persistence manager
-   * @param saveIntervalMs Minimum time between saves (throttling)
    * @param debugLogging Enable verbose logging
    */
-  function initialize(saveIntervalMs as Lang.Number, debugLogging as Lang.Boolean) {
-    mSaveIntervalMs = saveIntervalMs;
+  function initialize(debugLogging as Lang.Boolean) {
     mDebugLogging = debugLogging;
-
-    if (mDebugLogging) {
-      System.println("PersistenceManager: Initialized (save interval=" + saveIntervalMs + "ms)");
-    }
   }
 
   /**
    * Save milestone finish times to persistent storage
    * Includes checksum for corruption detection
    * @param finishTimesMs Array of finish times to save
-   * @param currentTimeMs Current timer time (for throttling)
-   * @return true if save was performed, false if throttled or failed
+   * @return true if saved, false on storage error
    */
   public function saveFinishTimes(
-    finishTimesMs as Lang.Array<Lang.Number?>,
-    currentTimeMs as Lang.Number
+    finishTimesMs as Lang.Array<Lang.Number?>
   ) as Lang.Boolean {
-
-    // Throttle saves to avoid excessive storage writes
-    if (currentTimeMs - mLastSuccessfulSaveTimeMs < mSaveIntervalMs) {
-      if (mDebugLogging) {
-        System.println("PersistenceManager: Save throttled (last save " +
-                       (currentTimeMs - mLastSuccessfulSaveTimeMs) + "ms ago)");
-      }
-      return false;
-    }
-
-    // Calculate checksum for data integrity verification
     var checksum = calculateChecksum(finishTimesMs);
 
     try {
-      Storage.setValue(STORAGE_KEY_FINISH_TIMES, finishTimesMs);
+      Storage.setValue(
+        STORAGE_KEY_FINISH_TIMES,
+        finishTimesMs as Lang.Array<Application.PropertyValueType>
+      );
       Storage.setValue(STORAGE_KEY_CHECKSUM, checksum);
-
-      mLastSuccessfulSaveTimeMs = currentTimeMs;
 
       if (mDebugLogging) {
         System.println("PersistenceManager: Saved " + finishTimesMs.size() +
@@ -147,8 +128,8 @@ class PersistenceManager {
    * @return true if data is valid
    */
   private function validateStoredData(
-    storedTimes as Lang.Object,
-    storedChecksum as Lang.Object,
+    storedTimes as Application.PropertyValueType,
+    storedChecksum as Application.PropertyValueType,
     expectedSize as Lang.Number
   ) as Lang.Boolean {
 
@@ -197,7 +178,8 @@ class PersistenceManager {
         }
 
         // Milestone times should be monotonically increasing
-        if (i > 0 && timesArray[i - 1] != null && time < timesArray[i - 1]) {
+        var prev = i > 0 ? timesArray[i - 1] : null;
+        if (prev != null && time < prev) {
           if (mDebugLogging) {
             System.println("PersistenceManager: Validation failed - non-monotonic times at index " + i);
           }
@@ -230,34 +212,5 @@ class PersistenceManager {
     }
 
     return hash;
-  }
-
-  /**
-   * Check if enough time has passed for next save
-   * @param currentTimeMs Current timer time
-   * @return true if save is allowed
-   */
-  public function canSave(currentTimeMs as Lang.Number) as Lang.Boolean {
-    return (currentTimeMs - mLastSuccessfulSaveTimeMs >= mSaveIntervalMs);
-  }
-
-  /**
-   * Get time since last successful save
-   * @param currentTimeMs Current timer time
-   * @return Milliseconds since last save
-   */
-  public function getTimeSinceLastSave(currentTimeMs as Lang.Number) as Lang.Number {
-    return currentTimeMs - mLastSuccessfulSaveTimeMs;
-  }
-
-  /**
-   * Reset persistence state (for testing)
-   */
-  public function reset() as Void {
-    mLastSuccessfulSaveTimeMs = 0;
-
-    if (mDebugLogging) {
-      System.println("PersistenceManager: State reset");
-    }
   }
 }

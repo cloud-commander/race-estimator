@@ -45,8 +45,12 @@ class ActivityDataValidator {
       return true;
     }
 
-    // Check if accuracy is better than QUALITY_USABLE threshold
-    if (accuracy > Position.QUALITY_USABLE) {
+    // Reject only degraded fixes (LAST_KNOWN / POOR). QUALITY_NOT_AVAILABLE is
+    // accepted so indoor/treadmill runs (distance from accelerometer/footpod) work.
+    if (
+      accuracy == Position.QUALITY_LAST_KNOWN ||
+      accuracy == Position.QUALITY_POOR
+    ) {
       if (mGpsQualityGood && mDebugLogging) {
         System.println("ActivityDataValidator: GPS quality degraded (accuracy=" + accuracy + ")");
       }

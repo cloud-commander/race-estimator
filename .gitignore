@@ -4,3 +4,8 @@
 developer_key
 developer_key.der
 *.der
+# Compiler intermediates
+build/gen/
+build/external-mir/
+build/internal-mir/
+*.prg.debug.xml

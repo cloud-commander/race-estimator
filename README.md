@@ -36,7 +36,7 @@ Key facts
 
 Quick start — install a prebuilt binary
 
-1. Open `build/` and pick the binary that matches your device (e.g., `RaceEstimator-fenix7.prg`, `RaceEstimator-fr255s.prg`).
+1. Open `build/` and pick the binary that matches your device (e.g., `RaceEstimator-fenix7.prg`, `RaceEstimator-epix2pro47mm.prg`).
 2. Copy the `.prg` to your watch `GARMIN/Apps` folder (macOS: use Android File Transfer or MTP tool).
 
 ## Sideloading the `.prg` to a device (detailed)
@@ -101,18 +101,22 @@ Build from source (developer)
 - Requirements: Garmin Connect IQ SDK (recommended 5.2.0+), `monkeyc` CLI, and your Connect IQ developer key.
 - Example build commands (replace device id where shown):
 
+Always pass `-r` (release). Without it you get a debug build, which ignores saved
+state (progress is lost if the field restarts mid-run) and logs every second.
+
 ```bash
-# Build for fenix7
+# Build for fenix7 (release, strict type check)
 monkeyc -o bin/RaceEstimator-fenix7.prg -f monkey.jungle \
-  -y ~/.Garmin/ConnectIQ/developer_key.der -d fenix7
+  -y ~/.Garmin/ConnectIQ/developer_key.der -d fenix7 -r -l 3
 
-# Build for fr255s
-monkeyc -o bin/RaceEstimator-fr255s.prg -f monkey.jungle \
-  -y ~/.Garmin/ConnectIQ/developer_key.der -d fr255s
+# Build for epix Pro (Gen 2) 47mm
+monkeyc -o bin/RaceEstimator-epix2pro47mm.prg -f monkey.jungle \
+  -y ~/.Garmin/ConnectIQ/developer_key.der -d epix2pro47mm -r -l 3
 
-# Build for venu2plus
-monkeyc -o bin/RaceEstimator-venu2plus.prg -f monkey.jungle \
-  -y ~/.Garmin/ConnectIQ/developer_key.der -d venu2plus
+# Run unit tests in the simulator (start it first with `connectiq`)
+monkeyc -o bin/test.prg -f monkey.jungle \
+  -y ~/.Garmin/ConnectIQ/developer_key.der -d fenix7 -t -l 3
+monkeydo bin/test.prg fenix7 -t
 ```
 
 Developer key (important)
@@ -125,7 +129,7 @@ Developer key (important)
 Usage (on the watch)
 
 1. Add the "Race Estimator" data field to a running activity screen.
-2. Use a 1-field or compact layout for best visibility.
+2. Use a 1-field layout to see three milestones, HR and remaining distance. In 2/3/4-field layouts the field shows only the next milestone.
 3. Wait for GPS lock; the data field requires ≥100 m of recorded distance and a short smoothing window before stable predictions appear.
 
 Supported / tested targets
@@ -133,8 +137,7 @@ Supported / tested targets
 - See `manifest.xml` for the authoritative product list. Common targets used during development and testing include:
   - Fenix 7 family (fenix7, fenix7pro, fenix7s, fenix7x, ...)
   - Fenix 8 family (selected Pro/solar variants)
-  - Forerunner 255 series (fr255, fr255m, fr255s)
-  - Venu 2 Plus (AMOLED)
+  - epix Gen 2 / epix Pro Gen 2 42mm and 47mm (AMOLED)
 
 Why 5.2.0+ as recommended SDK?
 

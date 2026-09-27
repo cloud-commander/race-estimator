@@ -17,7 +17,7 @@ class PaceEstimator {
   private const MAX_DELTA_TIME_SEC = 5.0d;        // Max time gap before reset
 
   // Pace validation bounds
-  private const PACE_MIN_SEC_PER_M = 0.05;  // ~3 min/km (very fast)
+  private const PACE_MIN_SEC_PER_M = 0.05;  // 0:50/km (faster than any human)
   private const PACE_MAX_SEC_PER_M = 20.0;  // ~5.5 hours/km (walking)
 
   // State tracking

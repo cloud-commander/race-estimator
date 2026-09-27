@@ -57,7 +57,17 @@ class MilestoneManager {
       ] as Lang.Array<Lang.Number>;
 
     mLabels =
-      ["5K", "5MI", "10K", "13.1K", "10MI", "HM", "26.2K", "FM", "50K"] as
+      [
+        "5K",
+        "5 MI",
+        "10K",
+        "13.1K",
+        "10 MI",
+        "HALF",
+        "26.2K",
+        "MARATHON",
+        "50K",
+      ] as
       Lang.Array<Lang.String>;
 
     // Initialize completion tracking
@@ -206,24 +216,14 @@ class MilestoneManager {
       }
     }
 
-    // Check each displayed milestone for completion
-    for (var i = 0; i < mDisplayRowCount; i++) {
-      var idx = mDisplayIndices[i];
-
-      // Comprehensive array bounds validation
+    // Check every milestone (not just displayed rows) so a restored or
+    // skipped-ahead state can never leave a reached milestone unmarked
+    for (var idx = 0; idx < mMilestoneCount; idx++) {
       if (
-        idx != null &&
-        idx >= 0 &&
-        idx < mMilestoneCount &&
-        idx < mDistancesCm.size() &&
-        idx < mFinishTimesMs.size() &&
         mFinishTimesMs[idx] == null &&
         currentDistanceCm >= mDistancesCm[idx].toDouble() - toleranceCm
       ) {
-        // Milestone completed!
         mFinishTimesMs[idx] = timerTimeMs;
-
-        // Vibrate to celebrate milestone completion
         vibrateForMilestone();
 
         if (mDebugLogging) {
@@ -238,18 +238,10 @@ class MilestoneManager {
           );
         }
 
-        if (i == 0) {
-          // First display row completed - start celebration
-          mCelebrationStartTimeMs = timerTimeMs;
-          mCelebrationMilestoneIdx = idx;
-          needsRotation = true;
-
-          if (mDebugLogging) {
-            System.println(
-              "MilestoneManager: Starting celebration for milestone " + idx
-            );
-          }
-        }
+        // Celebrate the furthest milestone reached this tick
+        mCelebrationStartTimeMs = timerTimeMs;
+        mCelebrationMilestoneIdx = idx;
+        needsRotation = true;
       }
     }
 
@@ -275,44 +267,25 @@ class MilestoneManager {
    * Handles celebration state and display rotation logic
    */
   public function rebuildDisplay() as Void {
-    if (mDebugLogging) {
-      System.println("MilestoneManager: Rebuilding display");
+    // Milestones complete in ascending distance order, so the display is a
+    // window of consecutive milestones. It starts at the celebrated milestone
+    // (kept in row 0 for CELEBRATION_DURATION_MS) or at the next uncompleted
+    // one, and is clamped so the last rows keep showing FM/50K results
+    // instead of going blank near the end of an ultra.
+    var start = getNextMilestoneIdx();
+    if (mCelebrationMilestoneIdx != null) {
+      start = mCelebrationMilestoneIdx;
+    }
+    if (start > mMilestoneCount - mDisplayRowCount) {
+      start = mMilestoneCount - mDisplayRowCount;
+    }
+    if (start < 0) {
+      start = 0;
     }
 
-    var writeIdx = 0;
-    var newDisplayIndices = new Lang.Array<Lang.Number?>[mDisplayRowCount];
-
-    // If celebrating, keep completed milestone in first row temporarily
-    if (mCelebrationStartTimeMs != null && mCelebrationMilestoneIdx != null) {
-      // Check if this is the last milestone
-      var isLastMilestone = mCelebrationMilestoneIdx == mMilestoneCount - 1;
-
-      if (isLastMilestone) {
-        // Last milestone - keep showing it permanently, end celebration
-        mCelebrationStartTimeMs = null;
-        mCelebrationMilestoneIdx = null;
-
-        if (mDebugLogging) {
-          System.println(
-            "MilestoneManager: Last milestone reached, ending celebration"
-          );
-        }
-      } else {
-        // Show completed milestone in first row during celebration
-        newDisplayIndices[writeIdx] = mCelebrationMilestoneIdx;
-        writeIdx++;
-      }
+    for (var i = 0; i < mDisplayRowCount; i++) {
+      mDisplayIndices[i] = start + i < mMilestoneCount ? start + i : null;
     }
-
-    // Fill remaining rows with uncompleted milestones
-    for (var i = 0; i < mMilestoneCount && writeIdx < mDisplayRowCount; i++) {
-      if (mFinishTimesMs[i] == null) {
-        newDisplayIndices[writeIdx] = i;
-        writeIdx++;
-      }
-    }
-
-    mDisplayIndices = newDisplayIndices;
 
     if (mDebugLogging) {
       System.println(
@@ -325,6 +298,31 @@ class MilestoneManager {
           "]"
       );
     }
+  }
+
+  /**
+   * Index of the first uncompleted milestone
+   * @return Milestone index, or milestoneCount if all are complete
+   */
+  public function getNextMilestoneIdx() as Lang.Number {
+    for (var i = 0; i < mMilestoneCount; i++) {
+      if (mFinishTimesMs[i] == null) {
+        return i;
+      }
+    }
+    return mMilestoneCount;
+  }
+
+  /**
+   * Milestone the UI should focus on: the one being celebrated, else the
+   * next uncompleted one, else the last one (all complete)
+   */
+  public function getFocusIdx() as Lang.Number {
+    if (mCelebrationMilestoneIdx != null) {
+      return mCelebrationMilestoneIdx;
+    }
+    var next = getNextMilestoneIdx();
+    return next < mMilestoneCount ? next : mMilestoneCount - 1;
   }
 
   /**
@@ -396,7 +394,7 @@ class MilestoneManager {
     timeMs as Lang.Number
   ) as Lang.Boolean {
     // Validate index
-    if (idx == null || idx < 0 || idx >= mMilestoneCount) {
+    if (idx < 0 || idx >= mMilestoneCount) {
       if (mDebugLogging) {
         System.println(
           "MilestoneManager: markMilestoneComplete invalid idx " + idx
@@ -432,21 +430,8 @@ class MilestoneManager {
       );
     }
 
-    // If the milestone is currently in the first display row, start celebration
-    if (
-      mDisplayIndices != null &&
-      mDisplayIndices.size() > 0 &&
-      mDisplayIndices[0] == idx
-    ) {
-      mCelebrationStartTimeMs = timeMs;
-      mCelebrationMilestoneIdx = idx;
-      if (mDebugLogging) {
-        System.println(
-          "MilestoneManager: markMilestoneComplete started celebration for " +
-            idx
-        );
-      }
-    }
+    mCelebrationStartTimeMs = timeMs;
+    mCelebrationMilestoneIdx = idx;
 
     // Rebuild display to reflect completed milestone and celebration state
     rebuildDisplay();
@@ -459,10 +444,14 @@ class MilestoneManager {
    * Gracefully handles devices that don't support vibration
    */
   private function vibrateForMilestone() as Void {
-    if (Attention has :vibrate) {
-      // Single vibration pulse: 50ms vibration
-      var profile = [new Attention.VibeProfile(50, 50)];
-      Attention.vibrate(profile);
+    if (!(Attention has :vibrate) || !System.getDeviceSettings().vibrateOn) {
+      return;
     }
+    // Two full-strength pulses: noticeable mid-stride (a 50ms/50% pulse is not)
+    Attention.vibrate([
+      new Attention.VibeProfile(100, 300),
+      new Attention.VibeProfile(0, 150),
+      new Attention.VibeProfile(100, 300),
+    ]);
   }
 }

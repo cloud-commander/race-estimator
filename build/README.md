@@ -6,23 +6,23 @@ Choose the appropriate `.prg` file for your device and copy it to your watch's `
 
 ### Fenix 7 Series
 
-- **RaceEstimator-fenix7.prg** (104KB)
+- **RaceEstimator-fenix7.prg**
   - Fenix 7
   - MIP display
 
-- **RaceEstimator-fenix7pro.prg** (104KB)
+- **RaceEstimator-fenix7pro.prg**
   - Fenix 7 Pro
   - MIP display
 
-### Forerunner Series
+### epix Pro (Gen 2) Series
 
-- **RaceEstimator-fr255s.prg** (104KB)
-  - Forerunner 255S
-  - MIP display
+- **RaceEstimator-epix2pro42mm.prg**
+  - epix Pro (Gen 2) 42mm
+  - AMOLED display (pixel-shifted, black background)
 
-### Future Support
-
-**Fenix 8X**: Support will be added once the device becomes available in the Connect IQ SDK.
+- **RaceEstimator-epix2pro47mm.prg**
+  - epix Pro (Gen 2) 47mm / quatix 7 Pro
+  - AMOLED display (pixel-shifted, black background)
 
 ## Installation Instructions
 
@@ -47,7 +47,7 @@ Choose the appropriate `.prg` file for your device and copy it to your watch's `
 
 - **Real-time predictions** for 9 running milestones (5K, 5MI, 10K, 13.1K, 10MI, HM, 26.2K, FM, 50K)
 - **Dynamic finish time calculation** - updates as your pace changes
-- **5-second moving average** - smooths GPS noise for stable predictions
+- **Average-pace prediction** - remaining distance at your activity average pace (EMA-smoothed)
 - **GPS validation** - waits for good signal quality before showing estimates
 - **Persistent state** - saves progress if you pause/resume
 - **Zero-allocation performance** - optimized for battery efficiency
@@ -57,9 +57,9 @@ Choose the appropriate `.prg` file for your device and copy it to your watch's `
 1. Add as a data field in any running activity
 2. Best viewed in 1-field layout for maximum visibility
 3. Wait for GPS lock and 100m distance
-4. After 5 seconds, predictions will appear
+4. Predictions appear after 100 m and 5 s of timer time
 5. Watch estimates update dynamically as you run!
 
 ## Version
 
-Current version: 1.0.0 with moving average smoothing
+Current version: 1.0.0. These are release builds (`monkeyc -r`).

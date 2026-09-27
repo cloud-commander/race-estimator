@@ -1,135 +1,118 @@
 using Toybox.Lang;
 using Toybox.Graphics;
-using Toybox.System;
 
-// Manages color schemes for different display types
-// Handles AMOLED burn-in mitigation and light/dark themes
+// 8-bit palette, CGA-inspired, tuned per panel type.
+//
+// MIP (fenix 7) is reflective and low-contrast: mid-tones wash out in
+// daylight, so it uses full-intensity primaries (0x00/0xFF channels) plus one
+// mid grey for the gauge track. All are native MIP palette colours, so
+// nothing is dithered.
+//
+// AMOLED (fenix 8, epix) is emissive: saturated neon reads well even at half
+// intensity, and OLED power/wear scale with brightness, so it uses the
+// 0xAA row of the same palette with a near-black track.
 class ColorSchemeManager {
+  // Dark (MIP)
+  private const D_VALUE = 0xFFFFFF;
+  private const D_LABEL = 0x00FFFF; // cyan
+  private const D_TITLE = 0xFFFF00; // yellow
+  private const D_STATUS = 0xFF00FF; // magenta
+  private const D_PROGRESS = 0x00FF00; // green
+  private const D_TRACK = 0x555555; // visible but quiet in sunlight
+  // Light (MIP, white background): yellow/cyan vanish on white, so darker hues
+  private const L_VALUE = 0x000000;
+  private const L_LABEL = 0x0000FF;
+  private const L_TITLE = 0xAA00AA;
+  private const L_STATUS = 0xFF0000;
+  private const L_PROGRESS = 0x00AA00;
+  private const L_TRACK = 0xAAAAAA;
+  // AMOLED (always black background, half intensity)
+  private const A_VALUE = 0xAAAAAA;
+  private const A_LABEL = 0x00AAAA;
+  private const A_TITLE = 0xAAAA00;
+  private const A_STATUS = 0xAA00AA;
+  private const A_PROGRESS = 0x00AA00;
+  private const A_TRACK = 0x000055;
 
-  // Current color scheme
-  private var mBackgroundColor as Lang.Number = Graphics.COLOR_BLACK;
-  private var mForegroundColor as Lang.Number = Graphics.COLOR_WHITE;
-  private var mAccentColor as Lang.Number = Graphics.COLOR_ORANGE;
-  private var mDimmedColor as Lang.Number = Graphics.COLOR_DK_GRAY;
+  private var mBackground as Lang.Number = Graphics.COLOR_BLACK;
+  private var mValue as Lang.Number = D_VALUE;
+  private var mLabel as Lang.Number = D_LABEL;
+  private var mTitle as Lang.Number = D_TITLE;
+  private var mStatus as Lang.Number = D_STATUS;
+  private var mProgress as Lang.Number = D_PROGRESS;
+  private var mTrack as Lang.Number = D_TRACK;
 
-  // Display type
   private var mIsAmoled as Lang.Boolean = false;
 
-  // Debug logging
-  private var mDebugLogging as Lang.Boolean = false;
-
-  /**
-   * Initialize color scheme manager
-   * @param isAmoled True if display requires burn-in protection
-   * @param debugLogging Enable verbose logging
-   */
   function initialize(isAmoled as Lang.Boolean, debugLogging as Lang.Boolean) {
     mIsAmoled = isAmoled;
-    mDebugLogging = debugLogging;
-
-    if (mDebugLogging) {
-      System.println("ColorSchemeManager: Initialized (AMOLED=" + isAmoled + ")");
-    }
   }
 
   /**
-   * Update colors based on display type and system background
-   * @param systemBackground System background color (ignored for AMOLED)
+   * Pick the palette for the system background (ignored on AMOLED)
    */
   public function updateColors(systemBackground as Lang.Number) as Void {
     if (mIsAmoled) {
-      // AMOLED burn-in mitigation: Use dimmer colors to reduce pixel wear
-      mBackgroundColor = Graphics.COLOR_BLACK;
-      mForegroundColor = Graphics.COLOR_LT_GRAY;  // Dimmer than pure white
-      mAccentColor = Graphics.COLOR_BLUE;         // Blue has lower OLED power draw than red/orange
-      mDimmedColor = Graphics.COLOR_DK_GRAY;      // Very dim for completed milestones
-
-      if (mDebugLogging) {
-        System.println("ColorSchemeManager: Using AMOLED color scheme");
-      }
+      mBackground = Graphics.COLOR_BLACK;
+      mValue = A_VALUE;
+      mLabel = A_LABEL;
+      mTitle = A_TITLE;
+      mStatus = A_STATUS;
+      mProgress = A_PROGRESS;
+      mTrack = A_TRACK;
+    } else if (
+      systemBackground == Graphics.COLOR_WHITE ||
+      systemBackground == Graphics.COLOR_LT_GRAY
+    ) {
+      mBackground = systemBackground;
+      mValue = L_VALUE;
+      mLabel = L_LABEL;
+      mTitle = L_TITLE;
+      mStatus = L_STATUS;
+      mProgress = L_PROGRESS;
+      mTrack = L_TRACK;
     } else {
-      // MIP display: Use system background and adjust foreground accordingly
-      mBackgroundColor = systemBackground;
-
-      // Detect light vs dark background
-      if (
-        systemBackground == Graphics.COLOR_WHITE ||
-        systemBackground == Graphics.COLOR_LT_GRAY ||
-        systemBackground == Graphics.COLOR_TRANSPARENT
-      ) {
-        // Light background - use dark text
-        mForegroundColor = Graphics.COLOR_BLACK;
-        mAccentColor = Graphics.COLOR_BLUE;
-
-        if (mDebugLogging) {
-          System.println("ColorSchemeManager: Using light theme (bg=" + systemBackground + ")");
-        }
-      } else {
-        // Dark background - use light text
-        mForegroundColor = Graphics.COLOR_WHITE;
-        mAccentColor = Graphics.COLOR_ORANGE;
-
-        if (mDebugLogging) {
-          System.println("ColorSchemeManager: Using dark theme (bg=" + systemBackground + ")");
-        }
-      }
-
-      // On MIP, dimmed color same as foreground (no burn-in concerns)
-      mDimmedColor = mForegroundColor;
+      mBackground = Graphics.COLOR_BLACK;
+      mValue = D_VALUE;
+      mLabel = D_LABEL;
+      mTitle = D_TITLE;
+      mStatus = D_STATUS;
+      mProgress = D_PROGRESS;
+      mTrack = D_TRACK;
     }
   }
 
-  /**
-   * Get background color
-   * @return Background color
-   */
   public function getBackgroundColor() as Lang.Number {
-    return mBackgroundColor;
+    return mBackground;
   }
 
-  /**
-   * Get foreground color
-   * @return Foreground color
-   */
-  public function getForegroundColor() as Lang.Number {
-    return mForegroundColor;
+  // Numbers (finish times)
+  public function getValueColor() as Lang.Number {
+    return mValue;
   }
 
-  /**
-   * Get accent color
-   * @return Accent color
-   */
-  public function getAccentColor() as Lang.Number {
-    return mAccentColor;
+  // Table labels, context line
+  public function getLabelColor() as Lang.Number {
+    return mLabel;
   }
 
-  /**
-   * Get dimmed color (for completed items)
-   * @return Dimmed color
-   */
-  public function getDimmedColor() as Lang.Number {
-    return mDimmedColor;
+  // Name of the milestone in focus
+  public function getTitleColor() as Lang.Number {
+    return mTitle;
   }
 
-  /**
-   * Check if using AMOLED color scheme
-   * @return true if AMOLED
-   */
-  public function isAmoled() as Lang.Boolean {
-    return mIsAmoled;
+  // Status messages (waiting for GPS, stage clear...)
+  public function getStatusColor() as Lang.Number {
+    return mStatus;
   }
 
-  /**
-   * Get diagnostics for debugging
-   * @return Dictionary with current state
-   */
-  public function getDiagnostics() as Lang.Dictionary {
-    return {
-      "isAmoled" => mIsAmoled,
-      "backgroundColor" => mBackgroundColor,
-      "foregroundColor" => mForegroundColor,
-      "accentColor" => mAccentColor,
-      "dimmedColor" => mDimmedColor
-    };
+  // Filled gauge segments, reached ticks
+  public function getProgressColor() as Lang.Number {
+    return mProgress;
+  }
+
+  // Empty gauge segments, dividers
+  public function getTrackColor() as Lang.Number {
+    return mTrack;
   }
 }

@@ -1,258 +1,65 @@
 using Toybox.Lang;
-using Toybox.System;
 
-// Zero-allocation text display cache with hash-based invalidation
-// Caches formatted display strings to minimize string allocations during updates
+// Per-milestone cache of formatted finish-time strings.
+// Each milestone's string is only re-formatted when its displayed second
+// changes, so the per-second compute allocates at most a few short strings.
 class DisplayTextCache {
-  // Pre-allocated cache arrays (zero allocation during updates)
-  private var mCachedTimes as Lang.Array<Lang.String>;
-  private var mCachedLabels as Lang.Array<Lang.String>;
-  private var mCachedDisplayTexts as Lang.Array<Lang.String>;
-  private var mLastDisplayTextHash as Lang.Array<Lang.Number>;
+  private const PENDING_TEXT = "--:--";
+  private const PENDING_HASH = -1;
 
-  // Configuration
-  private var mRowCount as Lang.Number;
-  private var mDebugLogging as Lang.Boolean = false;
+  private var mTimes as Lang.Array<Lang.String>;
+  private var mHashes as Lang.Array<Lang.Number>;
+  private var mCount as Lang.Number;
 
-  /**
-   * Initialize display text cache
-   * @param rowCount Number of display rows to cache
-   * @param debugLogging Enable verbose logging
-   */
-  function initialize(rowCount as Lang.Number, debugLogging as Lang.Boolean) {
-    mRowCount = rowCount;
-    mDebugLogging = debugLogging;
+  function initialize(milestoneCount as Lang.Number) {
+    mCount = milestoneCount;
+    mTimes = new Lang.Array<Lang.String>[milestoneCount];
+    mHashes = new Lang.Array<Lang.Number>[milestoneCount];
+    reset();
+  }
 
-    // Pre-allocate all arrays (zero allocation during updates)
-    mCachedTimes = new Lang.Array<Lang.String>[rowCount];
-    mCachedLabels = new Lang.Array<Lang.String>[rowCount];
-    mCachedDisplayTexts = new Lang.Array<Lang.String>[rowCount];
-    mLastDisplayTextHash = new Lang.Array<Lang.Number>[rowCount];
-
-    // Initialize with defaults
-    for (var i = 0; i < rowCount; i++) {
-      mCachedTimes[i] = "";
-      mCachedLabels[i] = "";
-      mCachedDisplayTexts[i] = "";
-      mLastDisplayTextHash[i] = 0;
-    }
-
-    if (mDebugLogging) {
-      System.println("DisplayTextCache: Initialized (" + rowCount + " rows)");
+  // Store a finish time (actual or projected) for a milestone
+  public function setTime(idx as Lang.Number, timeMs as Lang.Number) as Void {
+    var hash = timeMs / 1000;
+    if (hash != mHashes[idx]) {
+      mHashes[idx] = hash;
+      mTimes[idx] = formatDuration(timeMs);
     }
   }
 
-  /**
-   * Update cached text for a completed milestone
-   * Only updates if hash changed (milestone just completed)
-   * @param rowIndex Display row index (0-based)
-   * @param label Milestone label
-   * @param finishTime Finish time in milliseconds
-   * @return true if cache was updated
-   */
-  public function updateCompleted(
-    rowIndex as Lang.Number,
-    label as Lang.String,
-    finishTime as Lang.Number
-  ) as Lang.Boolean {
-    // Use finish time as hash (changes once when milestone completes)
-    var currentHash = finishTime;
-
-    // Only update if hash changed (avoids string allocations)
-    if (currentHash != mLastDisplayTextHash[rowIndex]) {
-      mCachedTimes[rowIndex] = formatTime(finishTime);
-      // Add ASCII-safe marker to completed milestone (avoid glyph fallback on device fonts)
-      mCachedLabels[rowIndex] = Lang.format("$1$ *", [label]);
-      // Combine label and time with double-space separator
-      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$", [
-        mCachedLabels[rowIndex],
-        mCachedTimes[rowIndex],
-      ]);
-      mLastDisplayTextHash[rowIndex] = currentHash;
-
-      if (mDebugLogging) {
-        System.println(
-          "DisplayTextCache: Updated completed row " +
-            rowIndex +
-            " (" +
-            label +
-            " @ " +
-            mCachedTimes[rowIndex] +
-            ")"
-        );
-      }
-
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Update cached text for an in-progress milestone
-   * Only updates when seconds change (reduces allocation frequency)
-   * @param rowIndex Display row index (0-based)
-   * @param label Milestone label
-   * @param remainingTimeMs Remaining time in milliseconds
-   * @return true if cache was updated
-   */
-  public function updateRemaining(
-    rowIndex as Lang.Number,
-    label as Lang.String,
-    remainingTimeMs as Lang.Number
-  ) as Lang.Boolean {
-    // Hash based on seconds (updates once per second, not per frame)
-    var currentHash = (remainingTimeMs / 1000).toNumber();
-
-    // Only update when seconds change
-    if (currentHash != mLastDisplayTextHash[rowIndex]) {
-      mCachedTimes[rowIndex] = formatTime(remainingTimeMs);
-      mCachedLabels[rowIndex] = label;
-      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$", [
-        mCachedLabels[rowIndex],
-        mCachedTimes[rowIndex],
-      ]);
-      mLastDisplayTextHash[rowIndex] = currentHash;
-
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Update cached text for milestone at zero (distance reached but not marked complete)
-   * @param rowIndex Display row index (0-based)
-   * @param label Milestone label
-   * @return true if cache was updated
-   */
-  public function updateZero(
-    rowIndex as Lang.Number,
-    label as Lang.String
-  ) as Lang.Boolean {
-    // Only update if hash changed (use -1 as special marker for zero state)
-    if (mLastDisplayTextHash[rowIndex] != -1) {
-      mCachedTimes[rowIndex] = "0:00";
-      mCachedLabels[rowIndex] = label;
-      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$", [
-        mCachedLabels[rowIndex],
-        mCachedTimes[rowIndex],
-      ]);
-      mLastDisplayTextHash[rowIndex] = -1;
-
-      if (mDebugLogging) {
-        System.println(
-          "DisplayTextCache: Updated zero row " + rowIndex + " (" + label + ")"
-        );
-      }
-
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Get cached display text for a row
-   * @param rowIndex Display row index (0-based)
-   * @return Formatted display text (label + time)
-   */
-  public function getDisplayText(rowIndex as Lang.Number) as Lang.String {
-    if (rowIndex >= 0 && rowIndex < mRowCount) {
-      return mCachedDisplayTexts[rowIndex];
-    }
-    return "";
-  }
-
-  /**
-   * Get cached label for a row
-   * @param rowIndex Display row index (0-based)
-   * @return Cached label
-   */
-  public function getLabel(rowIndex as Lang.Number) as Lang.String {
-    if (rowIndex >= 0 && rowIndex < mRowCount) {
-      return mCachedLabels[rowIndex];
-    }
-    return "";
-  }
-
-  /**
-   * Get cached time for a row
-   * @param rowIndex Display row index (0-based)
-   * @return Cached formatted time
-   */
-  public function getTime(rowIndex as Lang.Number) as Lang.String {
-    if (rowIndex >= 0 && rowIndex < mRowCount) {
-      return mCachedTimes[rowIndex];
-    }
-    return "";
-  }
-
-  /**
-   * Reset cache to initial state
-   * @param defaultLabel Default label to use for all rows
-   */
-  public function reset(defaultLabel as Lang.String) as Void {
-    for (var i = 0; i < mRowCount; i++) {
-      mCachedTimes[i] = "--:--";
-      mCachedLabels[i] = defaultLabel;
-      mCachedDisplayTexts[i] = Lang.format("$1$  $2$", [defaultLabel, "--:--"]);
-      mLastDisplayTextHash[i] = 0;
-    }
-
-    if (mDebugLogging) {
-      System.println("DisplayTextCache: Reset to defaults");
+  // No prediction available yet
+  public function setPending(idx as Lang.Number) as Void {
+    if (mHashes[idx] != PENDING_HASH) {
+      mHashes[idx] = PENDING_HASH;
+      mTimes[idx] = PENDING_TEXT;
     }
   }
 
-  /**
-   * Set initial cache values (typically during initialization)
-   * @param rowIndex Display row index
-   * @param label Initial label
-   * @param time Initial time string
-   */
-  public function setInitial(
-    rowIndex as Lang.Number,
-    label as Lang.String,
-    time as Lang.String
-  ) as Void {
-    if (rowIndex >= 0 && rowIndex < mRowCount) {
-      mCachedTimes[rowIndex] = time;
-      mCachedLabels[rowIndex] = label;
-      mCachedDisplayTexts[rowIndex] = Lang.format("$1$  $2$", [label, time]);
-      mLastDisplayTextHash[rowIndex] = 0;
+  public function getTime(idx as Lang.Number) as Lang.String {
+    return idx >= 0 && idx < mCount ? mTimes[idx] : PENDING_TEXT;
+  }
+
+  public function reset() as Void {
+    for (var i = 0; i < mCount; i++) {
+      mTimes[i] = PENDING_TEXT;
+      mHashes[i] = PENDING_HASH;
     }
   }
+}
 
-  /**
-   * Format milliseconds as HH:MM or MM:SS
-   * @param millis Time in milliseconds
-   * @return Formatted time string
-   */
-  private function formatTime(millis as Lang.Number) as Lang.String {
-    var totalSec = millis / 1000;
-    var hours = totalSec / 3600;
-    var mins = (totalSec % 3600) / 60;
-    var secs = totalSec % 60;
+// Garmin-style duration: H:MM:SS at or above an hour, M:SS below
+function formatDuration(millis as Lang.Number) as Lang.String {
+  var totalSec = millis / 1000;
+  var hours = totalSec / 3600;
+  var mins = (totalSec % 3600) / 60;
+  var secs = totalSec % 60;
 
-    if (hours > 0) {
-      // HH:MM format for times over an hour
-      return Lang.format("$1$:$2$", [hours.format("%d"), mins.format("%02d")]);
-    } else {
-      // MM:SS format for times under an hour
-      return Lang.format("$1$:$2$", [mins.format("%d"), secs.format("%02d")]);
-    }
+  if (hours > 0) {
+    return Lang.format("$1$:$2$:$3$", [
+      hours.format("%d"),
+      mins.format("%02d"),
+      secs.format("%02d"),
+    ]);
   }
-
-  /**
-   * Get diagnostics for debugging
-   * @return Dictionary with cache state
-   */
-  public function getDiagnostics() as Lang.Dictionary {
-    return {
-      "rowCount" => mRowCount,
-      "displayTexts" => mCachedDisplayTexts,
-      "hashes" => mLastDisplayTextHash,
-    };
-  }
+  return Lang.format("$1$:$2$", [mins.format("%d"), secs.format("%02d")]);
 }

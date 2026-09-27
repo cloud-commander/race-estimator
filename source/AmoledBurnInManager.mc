@@ -1,24 +1,26 @@
 using Toybox.Lang;
 using Toybox.System;
 
-// Manages AMOLED burn-in protection through pixel shifting
-// Implements periodic position offsets to prevent pixel wear
+// Manages AMOLED burn-in protection through pixel shifting.
+// Everything drawn is shifted by (x, y) around a small orbit so no pixel of
+// static text/icons stays lit in the same place for more than a minute.
 class AmoledBurnInManager {
 
-  // Pixel offset pattern (cycles through 4 positions)
-  private const PIXEL_OFFSETS = [0, 1, -1, 0] as Lang.Array<Lang.Number>;
+  // Orbit of (dx, dy) offsets, stepped once per shift interval. Radius is
+  // kept at <= 3px so the move is invisible mid-run but spreads wear.
+  private const OFFSETS_X = [0, 3, 1, -2, -3, -1, 2] as Lang.Array<Lang.Number>;
+  private const OFFSETS_Y = [0, 1, 3, 2, -1, -3, -2] as Lang.Array<Lang.Number>;
 
   // State tracking
   private var mUpdateCount as Lang.Number = 0;
   private var mOffsetIndex as Lang.Number = 0;
-  private var mCurrentOffset as Lang.Number = 0;
   private var mShiftInterval as Lang.Number;
   private var mEnabled as Lang.Boolean = false;
   private var mDebugLogging as Lang.Boolean = false;
 
   /**
    * Initialize burn-in protection manager
-   * @param shiftInterval Number of updates between position shifts
+   * @param shiftInterval Number of updates between position shifts (onUpdate runs ~1/s)
    * @param enabled Enable burn-in protection (typically for AMOLED displays)
    * @param debugLogging Enable verbose logging
    */
@@ -30,16 +32,10 @@ class AmoledBurnInManager {
     mShiftInterval = shiftInterval;
     mEnabled = enabled;
     mDebugLogging = debugLogging;
-
-    if (mDebugLogging) {
-      System.println("AmoledBurnInManager: Initialized (interval=" + shiftInterval +
-                     ", enabled=" + enabled + ")");
-    }
   }
 
   /**
    * Update pixel shift state (call once per onUpdate)
-   * Cycles through position offsets at configured interval
    * @return true if position offset changed this update
    */
   public function update() as Lang.Boolean {
@@ -48,63 +44,32 @@ class AmoledBurnInManager {
     }
 
     mUpdateCount++;
-
     if (mUpdateCount >= mShiftInterval) {
       mUpdateCount = 0;
-      mOffsetIndex = (mOffsetIndex + 1) % PIXEL_OFFSETS.size();
-      mCurrentOffset = PIXEL_OFFSETS[mOffsetIndex];
+      mOffsetIndex = (mOffsetIndex + 1) % OFFSETS_X.size();
 
       if (mDebugLogging) {
-        System.println("AmoledBurnInManager: Position shift to " + mCurrentOffset +
-                       " (index=" + mOffsetIndex + ")");
+        System.println("AmoledBurnInManager: shift to (" + getOffsetX() + ", " + getOffsetY() + ")");
       }
-
       return true;
     }
-
     return false;
   }
 
-  /**
-   * Get current pixel offset for display positioning
-   * @return Pixel offset (-1, 0, or 1)
-   */
-  public function getOffset() as Lang.Number {
-    return mCurrentOffset;
+  public function getOffsetX() as Lang.Number {
+    return mEnabled ? OFFSETS_X[mOffsetIndex] : 0;
   }
 
-  /**
-   * Check if burn-in protection is enabled
-   * @return true if enabled
-   */
+  public function getOffsetY() as Lang.Number {
+    return mEnabled ? OFFSETS_Y[mOffsetIndex] : 0;
+  }
+
   public function isEnabled() as Lang.Boolean {
     return mEnabled;
   }
 
-  /**
-   * Reset to initial state
-   */
   public function reset() as Void {
     mUpdateCount = 0;
     mOffsetIndex = 0;
-    mCurrentOffset = 0;
-
-    if (mDebugLogging) {
-      System.println("AmoledBurnInManager: Reset");
-    }
-  }
-
-  /**
-   * Get diagnostics for debugging
-   * @return Dictionary with current state
-   */
-  public function getDiagnostics() as Lang.Dictionary {
-    return {
-      "enabled" => mEnabled,
-      "updateCount" => mUpdateCount,
-      "offsetIndex" => mOffsetIndex,
-      "currentOffset" => mCurrentOffset,
-      "shiftInterval" => mShiftInterval
-    };
   }
 }
