@@ -1,0 +1,61 @@
+<strings>
+    <string id="AppName">Ruck Load</string>
+
+    <!-- Field labels: uppercase only, drawn with the dot-matrix font -->
+    <string id="LabelEqPace">EFFORT PACE</string>
+    <string id="LabelEqPaceShort">EFFORT</string>
+    <string id="LabelKcal">RUCK CAL</string>
+    <string id="LabelLoadDist">LOAD</string>
+    <string id="LabelPack">PACK</string>
+    <string id="UnitPerHour">/H</string>
+
+    <!-- On-watch settings menu -->
+    <string id="MenuPack">Pack Weight</string>
+    <string id="MenuWeightUnit">Weight</string>
+    <string id="MenuDistanceUnit">Distance</string>
+    <string id="MenuTerrain">Terrain</string>
+    <string id="MenuWarn">Load Warning</string>
+
+    <!-- Settings -->
+    <string id="SetPackWeight">Pack weight, in the weight unit below (re-enter it if you switch kg/lbs here; the watch menu converts automatically)</string>
+    <string id="SetWeightUnit">Weight unit (pack weight, load x distance)</string>
+    <string id="SetDistanceUnit">Distance unit (pace, load x distance)</string>
+    <string id="SetBodyWeight">Body weight override in kg (0 = use user profile)</string>
+    <string id="SetTerrain">Terrain</string>
+    <string id="SetLoadWarn">Warn when load exceeds % of body weight</string>
+    <string id="SetCompactMetric">Metric shown in small fields</string>
+
+    <string id="UnitKg">kg</string>
+    <string id="UnitLbs">lbs</string>
+    <string id="UnitKm">km</string>
+    <string id="UnitMi">mi</string>
+
+    <string id="TerrainPaved">Paved / treadmill</string>
+    <string id="TerrainDirt">Dirt road</string>
+    <string id="TerrainLightBrush">Light brush</string>
+    <string id="TerrainHeavyBrush">Heavy brush</string>
+    <string id="TerrainSwamp">Swamp</string>
+    <string id="TerrainSand">Loose sand</string>
+
+    <string id="MetricEqPace">Effort pace (flat, no-pack equivalent)</string>
+    <string id="MetricKcal">Load-adjusted calories</string>
+    <string id="MetricLoadDist">Load x distance</string>
+    <string id="MetricLoadPct">Load % of body weight</string>
+
+    <!-- FIT contributions (Garmin Connect) -->
+    <string id="FitPowerTitle">Ruck Metabolic Rate</string>
+    <string id="FitPowerLabel">Ruck Metabolic Rate</string>
+    <string id="FitKcalLabel">Ruck Calories</string>
+    <string id="FitPackLabel">Pack Weight</string>
+    <string id="FitLoadKmLabel">Load x Distance</string>
+    <string id="FitAvgPaceLabel">Avg Effort Pace</string>
+    <string id="FitAvgBurnLabel">Avg Ruck Burn</string>
+    <string id="FitPeakBurnLabel">Peak Ruck Burn (30 s)</string>
+    <string id="FitLapKcalLabel">Lap Ruck Calories</string>
+    <string id="FitUnitMinKm">min/km</string>
+    <string id="FitUnitKcalH">kcal/h</string>
+    <string id="FitUnitW">W</string>
+    <string id="FitUnitKcal">kcal</string>
+    <string id="FitUnitKg">kg</string>
+    <string id="FitUnitKgKm">kg-km</string>
+</strings>

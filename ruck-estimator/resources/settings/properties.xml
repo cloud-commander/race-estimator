@@ -1,0 +1,13 @@
+<properties>
+    <property id="packWeight" type="float">15.0</property>
+    <!-- 0 = kg, 1 = lbs (pack weight and load x distance) -->
+    <property id="weightUnit" type="number">0</property>
+    <!-- 0 = km, 1 = mi (pace and load x distance) -->
+    <property id="distanceUnit" type="number">0</property>
+    <property id="bodyWeightKg" type="float">0.0</property>
+    <!-- Index into RuckModel.TERRAIN_FACTORS -->
+    <property id="terrain" type="number">0</property>
+    <property id="loadWarnPct" type="number">30</property>
+    <!-- 0 = eq pace, 1 = kcal, 2 = load x distance, 3 = load % -->
+    <property id="compactMetric" type="number">0</property>
+</properties>

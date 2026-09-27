@@ -1,0 +1,14 @@
+<fonts>
+    <font id="Big" filename="big.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="Medium" filename="medium.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="Label" filename="label.fnt" antialias="false" />
+    <font id="V0" filename="v0.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V1" filename="v1.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V2" filename="v2.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V3" filename="v3.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V4" filename="v4.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V5" filename="v5.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V6" filename="v6.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V7" filename="v7.fnt" antialias="false" filter="0123456789:.-%/ " />
+    <font id="V8" filename="v8.fnt" antialias="false" filter="0123456789:.-%/ " />
+</fonts>

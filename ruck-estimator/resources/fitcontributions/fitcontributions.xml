@@ -1,0 +1,10 @@
+<fitContributions>
+    <fitField id="0" displayInChart="true" sortOrder="0" precision="0" chartTitle="@Strings.FitPowerTitle" dataLabel="@Strings.FitPowerLabel" unitLabel="@Strings.FitUnitW" fillColor="#FF8800" />
+    <fitField id="1" displayInActivitySummary="true" sortOrder="1" precision="0" dataLabel="@Strings.FitKcalLabel" unitLabel="@Strings.FitUnitKcal" />
+    <fitField id="2" displayInActivitySummary="true" sortOrder="2" precision="1" dataLabel="@Strings.FitPackLabel" unitLabel="@Strings.FitUnitKg" />
+    <fitField id="3" displayInActivitySummary="true" sortOrder="3" precision="1" dataLabel="@Strings.FitLoadKmLabel" unitLabel="@Strings.FitUnitKgKm" />
+    <fitField id="4" displayInActivitySummary="true" sortOrder="4" precision="2" dataLabel="@Strings.FitAvgPaceLabel" unitLabel="@Strings.FitUnitMinKm" />
+    <fitField id="5" displayInActivitySummary="true" sortOrder="5" precision="0" dataLabel="@Strings.FitAvgBurnLabel" unitLabel="@Strings.FitUnitKcalH" />
+    <fitField id="6" displayInActivitySummary="true" sortOrder="6" precision="0" dataLabel="@Strings.FitPeakBurnLabel" unitLabel="@Strings.FitUnitKcalH" />
+    <fitField id="7" displayInActivityLaps="true" sortOrder="7" precision="0" dataLabel="@Strings.FitLapKcalLabel" unitLabel="@Strings.FitUnitKcal" />
+</fitContributions>

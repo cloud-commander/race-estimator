@@ -1,0 +1,41 @@
+<settings>
+    <setting propertyKey="@Properties.packWeight" title="@Strings.SetPackWeight">
+        <settingConfig type="numeric" min="0" max="220" />
+    </setting>
+    <setting propertyKey="@Properties.weightUnit" title="@Strings.SetWeightUnit">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.UnitKg</listEntry>
+            <listEntry value="1">@Strings.UnitLbs</listEntry>
+        </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.distanceUnit" title="@Strings.SetDistanceUnit">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.UnitKm</listEntry>
+            <listEntry value="1">@Strings.UnitMi</listEntry>
+        </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.bodyWeightKg" title="@Strings.SetBodyWeight">
+        <settingConfig type="numeric" min="0" max="250" />
+    </setting>
+    <setting propertyKey="@Properties.terrain" title="@Strings.SetTerrain">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.TerrainPaved</listEntry>
+            <listEntry value="1">@Strings.TerrainDirt</listEntry>
+            <listEntry value="2">@Strings.TerrainLightBrush</listEntry>
+            <listEntry value="3">@Strings.TerrainHeavyBrush</listEntry>
+            <listEntry value="4">@Strings.TerrainSwamp</listEntry>
+            <listEntry value="5">@Strings.TerrainSand</listEntry>
+        </settingConfig>
+    </setting>
+    <setting propertyKey="@Properties.loadWarnPct" title="@Strings.SetLoadWarn">
+        <settingConfig type="numeric" min="5" max="100" />
+    </setting>
+    <setting propertyKey="@Properties.compactMetric" title="@Strings.SetCompactMetric">
+        <settingConfig type="list">
+            <listEntry value="0">@Strings.MetricEqPace</listEntry>
+            <listEntry value="1">@Strings.MetricKcal</listEntry>
+            <listEntry value="2">@Strings.MetricLoadDist</listEntry>
+            <listEntry value="3">@Strings.MetricLoadPct</listEntry>
+        </settingConfig>
+    </setting>
+</settings>
