@@ -18,7 +18,11 @@ using Toybox.WatchUi;
 //! - MIP (fenix 7, fenix 8 Solar): LCD handheld (Game & Watch / Game Boy).
 //!   Follows the activity's black or white background with full-contrast ink
 //!   and solid glyphs; colour only for load warnings, in pure MIP colours.
-//! Nothing animates beyond the normal 1 Hz update.
+//! Animation runs on the normal ~1 Hz data field update only (no timers),
+//! so it costs no extra wake-ups: before the activity starts the full-screen
+//! field plays an arcade "attract mode" (marching rucker on a scrolling
+//! ground line, pack bar loading, hi-score, blinking PRESS START); pressing
+//! start shows READY then GO! for one update each.
 //!
 //! Full screen: walking rucker sprite, no-pack pace, calories, load x distance
 //! and a segmented pack-load energy bar. Half screen: pace and calories side
@@ -47,6 +51,7 @@ class RuckView extends WatchUi.DataField {
   private const MAX_STEP_MS = 5000; // larger timer jumps are gaps, not effort
 
   private const STORAGE_KEY = "ruck";
+  private const HI_KEY = "ruckHi"; // best ruck calories, kept across rucks
   private const STORAGE_VERSION = 2;
   private const SAVE_INTERVAL_MS = 30000;
 
@@ -111,6 +116,12 @@ class RuckView extends WatchUi.DataField {
   // on the boundary after block 8 and blocks 9-10 are the "over" zone
   private const BAR_MAX_OF_WARN = 1.25;
   private const BAR_GREEN_OF_WARN = 0.67; // "ok" colour below 2/3 of threshold
+
+  // Start screen: pack bar loads this many blocks per update; the ground
+  // dash pattern repeats every GROUND_STEPS updates so it reads as motion
+  private const LOAD_BLOCKS_PER_TICK = 2;
+  private const GROUND_STEPS = 4;
+  private const INTRO_FRAMES = 2; // READY, GO!
 
   private const MODE_SINGLE = 0;
   private const MODE_DUO = 1;
@@ -234,6 +245,29 @@ class RuckView extends WatchUi.DataField {
   private var mDx as Lang.Number = 0;
   private var mDy as Lang.Number = 0;
 
+  // Start screen / intro
+  private var mTimerState as Lang.Number? = null;
+  private var mAttractTick as Lang.Number = 0;
+  private var mIntroLeft as Lang.Number = 0;
+  private var mHiKcal as Lang.Float = 0.0;
+  private var mTitle as Lang.String = "";
+  private var mPressStart as Lang.String = "";
+  private var mHiLabel as Lang.String = "";
+  private var mReady as Lang.String = "";
+  private var mGo as Lang.String = "";
+  // Start-screen layout (computed with the full-screen one)
+  private var mAttP as Lang.Number = 0;
+  private var mAttSpriteY as Lang.Number = 0;
+  private var mAttGroundY as Lang.Number = 0;
+  private var mAttGroundHalf as Lang.Number = 0;
+  private var mAttTitleY as Lang.Number = 0;
+  private var mAttHiY as Lang.Number = 0;
+  private var mAttPackY as Lang.Number = 0;
+  private var mAttBarY as Lang.Number = 0;
+  private var mAttBarX as Lang.Number = 0;
+  private var mAttBarW as Lang.Number = 0;
+  private var mAttStartY as Lang.Number = 0;
+
   function initialize() {
     DataField.initialize();
 
@@ -295,6 +329,20 @@ class RuckView extends WatchUi.DataField {
     mFontMed = WatchUi.loadResource(Rez.Fonts.Medium) as Graphics.FontType;
     mFontLabel = WatchUi.loadResource(Rez.Fonts.Label) as Graphics.FontType;
     buildSpriteRuns();
+
+    mTitle = WatchUi.loadResource(Rez.Strings.Title) as Lang.String;
+    mPressStart = WatchUi.loadResource(Rez.Strings.PressStart) as Lang.String;
+    mHiLabel = WatchUi.loadResource(Rez.Strings.HiScore) as Lang.String;
+    mReady = WatchUi.loadResource(Rez.Strings.Ready) as Lang.String;
+    mGo = WatchUi.loadResource(Rez.Strings.Go) as Lang.String;
+    try {
+      var hi = Application.Storage.getValue(HI_KEY);
+      if (hi instanceof Lang.Number || hi instanceof Lang.Float) {
+        mHiKcal = hi.toFloat();
+      }
+    } catch (e) {
+      // No hi-score yet
+    }
 
     loadSettings();
   }
@@ -358,6 +406,12 @@ class RuckView extends WatchUi.DataField {
 
   function compute(info as Activity.Info) as Void {
     var timerMs = info.timerTime;
+    mTimerState = info.timerState;
+    // The intro plays on this screen's first updates after start; if another
+    // data screen was showing then, skip it rather than play it late
+    if (timerMs != null && timerMs > (INTRO_FRAMES + 1) * 1000) {
+      mIntroLeft = 0;
+    }
     var distM = info.elapsedDistance;
 
     if (!mRestoreChecked && timerMs != null && timerMs > 0) {
@@ -480,6 +534,10 @@ class RuckView extends WatchUi.DataField {
     mStartTime = null;
     mLastSaveMs = 0;
     mRestoreChecked = false;
+    // Back to the start screen for the next ruck
+    mTimerState = Activity.TIMER_STATE_OFF;
+    mAttractTick = 0;
+    mIntroLeft = 0;
     try {
       Application.Storage.deleteValue(STORAGE_KEY);
     } catch (e) {
@@ -506,6 +564,11 @@ class RuckView extends WatchUi.DataField {
   }
 
   function onTimerStart() as Void {
+    // READY / GO! only for a fresh start, not after a stop
+    if (mLastTimerMs == null || mLastTimerMs <= 0) {
+      mIntroLeft = INTRO_FRAMES;
+    }
+    mTimerState = Activity.TIMER_STATE_ON;
     onTimerResume();
   }
 
@@ -595,6 +658,38 @@ class RuckView extends WatchUi.DataField {
     mBarW = min(mW * 0.6, (chordHalf(mBarY + mBarH) - mW / 14) * 2);
     mBarX = mCenterX - mBarW / 2;
     mShowBar = true;
+    layoutAttract(dc, labelP);
+  }
+
+  // Start screen stack: big sprite on a ground line / title / hi-score /
+  // pack label / pack bar / PRESS START. Sprite shrinks until it fits.
+  private function layoutAttract(dc as Graphics.Dc, labelP as Lang.Number) as Void {
+    var big = dc.getFontHeight(mFontBig);
+    var g = mLabelH / 2;
+    var rest = 2 * g + big + 2 * g + 3 * (mLabelH + g) + mBarH + g;
+    var budget = mH * 0.86;
+    var p = mSpriteP > 0 ? mSpriteP * 2 : labelP;
+    while (p > 1 && SPRITE_H * p + g / 2 + rest > budget) {
+      p--;
+    }
+    mAttP = p;
+    var y = ((mH - (SPRITE_H * p + g / 2 + rest)) / 2).toNumber();
+    mAttSpriteY = y;
+    y += SPRITE_H * p + g / 2;
+    mAttGroundY = y;
+    mAttGroundHalf = min(chordHalf(y) - mW / 10, SPRITE_W * p * 2);
+    y += 2 * g;
+    mAttTitleY = y;
+    y += big + 2 * g;
+    mAttHiY = y;
+    y += mLabelH + g;
+    mAttPackY = y;
+    y += mLabelH + g;
+    mAttBarY = y;
+    mAttBarW = min(mW * 0.5, (chordHalf(y + mBarH) - mW / 12) * 2);
+    mAttBarX = mCenterX - mAttBarW / 2;
+    y += mBarH + g;
+    mAttStartY = y;
   }
 
   // Half screen: pace | calories, plus the pack bar. The wide row sits on
@@ -671,7 +766,14 @@ class RuckView extends WatchUi.DataField {
     dc.clear();
 
     if (mMode == MODE_FULL) {
-      drawFull(dc);
+      if (mTimerState != null && mTimerState == Activity.TIMER_STATE_OFF) {
+        drawAttract(dc);
+      } else if (mIntroLeft > 0) {
+        drawIntro(dc);
+        mIntroLeft--;
+      } else {
+        drawFull(dc);
+      }
     } else if (mMode == MODE_DUO) {
       drawDuo(dc);
     } else {
@@ -681,7 +783,7 @@ class RuckView extends WatchUi.DataField {
       }
       drawCell(dc, metric, mCenterX + mDx, mSingleY + mDy, mValueFont);
       if (mShowBar) {
-        drawBar(dc, mBarX + mDx, mBarY + mDy, mBarW);
+        drawBar(dc, mBarX + mDx, mBarY + mDy, mBarW, BAR_SEGMENTS);
       }
     }
   }
@@ -742,7 +844,98 @@ class RuckView extends WatchUi.DataField {
 
     drawDashedH(dc, mCenterX + dx, mDiv2Y + dy, mDivHalf[1]);
     drawPackLabel(dc, mCenterX + dx, mPackLabelY + dy);
-    drawBar(dc, mBarX + dx, mBarY + dy, mBarW);
+    drawBar(dc, mBarX + dx, mBarY + dy, mBarW, BAR_SEGMENTS);
+  }
+
+  // Arcade attract mode, one frame per update
+  private function drawAttract(dc as Graphics.Dc) as Void {
+    var dx = mDx;
+    var dy = mDy;
+    mAttractTick++;
+    mFrame = 1 - mFrame; // marching in place...
+    drawSprite(
+      dc,
+      mCenterX - (SPRITE_W * mAttP) / 2 + dx,
+      mAttSpriteY + dy,
+      mAttP,
+      mFrame
+    );
+    // ...while the ground scrolls past
+    drawGround(dc, mCenterX + dx, mAttGroundY + dy, mAttGroundHalf, mAttractTick);
+
+    drawTitle(dc, mCenterX + dx, mAttTitleY + dy, mFontBig, mTitle);
+    drawText(
+      dc,
+      mCenterX + dx,
+      mAttHiY + dy,
+      mFontLabel,
+      mLabelInk,
+      mHiLabel + " " + (mHiKcal + 0.5).toNumber().format("%04d")
+    );
+    drawPackLabel(dc, mCenterX + dx, mAttPackY + dy);
+    // "Loading" the pack: the bar fills up to the real load over a few frames
+    drawBar(dc, mAttBarX + dx, mAttBarY + dy, mAttBarW, mAttractTick * LOAD_BLOCKS_PER_TICK);
+    if (mBlinkOn) {
+      drawText(dc, mCenterX + dx, mAttStartY + dy, mFontLabel, mAccent, mPressStart);
+    }
+  }
+
+  // After start: READY, then GO!, one update each
+  private function drawIntro(dc as Graphics.Dc) as Void {
+    var dx = mDx;
+    var dy = mDy;
+    if (mSpriteP > 0) {
+      drawSprite(
+        dc,
+        mCenterX - (SPRITE_W * mSpriteP) / 2 + dx,
+        mSpriteY + dy,
+        mSpriteP,
+        mIntroLeft % 2
+      );
+    }
+    var go = mIntroLeft == 1;
+    var font = go ? mFontBig : mFontMed;
+    var y = (mH - dc.getFontHeight(font)) / 2 + dy;
+    if (go) {
+      drawTitle(dc, mCenterX + dx, y, font, mGo);
+    } else {
+      drawText(dc, mCenterX + dx, y, font, mAccent, mReady);
+    }
+  }
+
+  // Arcade title: ink over a one-dot accent drop shadow
+  private function drawTitle(
+    dc as Graphics.Dc,
+    x as Lang.Number,
+    y as Lang.Number,
+    font as Graphics.FontType,
+    text as Lang.String
+  ) as Void {
+    var dot = dc.getFontHeight(font) / 7;
+    drawText(dc, x + dot, y + dot, font, mAccent, text);
+    drawText(dc, x, y, font, mInk, text);
+  }
+
+  // Dashed ground line whose dashes step left one quarter-period per update
+  private function drawGround(
+    dc as Graphics.Dc,
+    cx as Lang.Number,
+    y as Lang.Number,
+    half as Lang.Number,
+    tick as Lang.Number
+  ) as Void {
+    var dash = mLabelH / 4 > 2 ? mLabelH / 4 : 2;
+    var period = dash * GROUND_STEPS;
+    var x0 = cx - half;
+    var x1 = cx + half;
+    dc.setColor(mRule, Graphics.COLOR_TRANSPARENT);
+    for (var x = x0 - (tick % GROUND_STEPS) * dash; x < x1; x += period) {
+      var a = x < x0 ? x0 : x;
+      var b = x + 2 * dash > x1 ? x1 : x + 2 * dash;
+      if (b > a) {
+        dc.fillRectangle(a, y, b - a, dash / 2 > 1 ? dash / 2 : 1);
+      }
+    }
   }
 
   private function drawDuo(dc as Graphics.Dc) as Void {
@@ -757,7 +950,7 @@ class RuckView extends WatchUi.DataField {
       mDuoCellY + mLabelH + mGap + dc.getFontHeight(mValueFont) + dy
     );
     drawPackLabel(dc, mCenterX + dx, mPackLabelY + dy);
-    drawBar(dc, mBarX + dx, mBarY + dy, mBarW);
+    drawBar(dc, mBarX + dx, mBarY + dy, mBarW, BAR_SEGMENTS);
   }
 
   private function drawPackLabel(
@@ -850,7 +1043,8 @@ class RuckView extends WatchUi.DataField {
     dc as Graphics.Dc,
     x as Lang.Number,
     y as Lang.Number,
-    width as Lang.Number
+    width as Lang.Number,
+    maxFilled as Lang.Number
   ) as Void {
     var gap = mBarH / 4 > 2 ? mBarH / 4 : 2;
     var segW = (width - (BAR_SEGMENTS - 1) * gap) / BAR_SEGMENTS;
@@ -858,6 +1052,9 @@ class RuckView extends WatchUi.DataField {
     // Same rounded % as the label, so the first red block lights exactly
     // when the label turns red
     var filled = Math.ceil((mLoadPctShown * BAR_SEGMENTS) / maxPct).toNumber();
+    if (filled > maxFilled) {
+      filled = maxFilled;
+    }
     for (var i = 0; i < BAR_SEGMENTS; i++) {
       var segStart = (i * maxPct) / BAR_SEGMENTS;
       var alert = segStart >= mWarnPct;
@@ -1048,6 +1245,9 @@ class RuckView extends WatchUi.DataField {
       "packLabel" => mPackLabel,
       "warn" => mLoadWarning,
       "pctShown" => mLoadPctShown,
+      "attract" => mTimerState != null && mTimerState == Activity.TIMER_STATE_OFF,
+      "intro" => mIntroLeft,
+      "hi" => mHiKcal,
     };
   }
 
@@ -1055,6 +1255,14 @@ class RuckView extends WatchUi.DataField {
   // change, crash); startTime ties them to this activity only
   private function saveState(timerMs as Lang.Number) as Void {
     mLastSaveMs = timerMs;
+    if (mKcal > mHiKcal + 0.5) {
+      mHiKcal = mKcal;
+      try {
+        Application.Storage.setValue(HI_KEY, mHiKcal);
+      } catch (e) {
+        // Keep it for this session only
+      }
+    }
     if (mStartTime == null) {
       return;
     }

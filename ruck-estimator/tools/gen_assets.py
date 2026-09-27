@@ -37,6 +37,7 @@ GLYPHS = {
     "/": [".....", "....#", "...#.", "..#..", ".#...", "#....", "....."],
     "%": ["##...", "##..#", "...#.", "..#..", ".#...", "#..##", "...##"],
     " ": ["...", "...", "...", "...", "...", "...", "..."],
+    "!": ["#", "#", "#", "#", "#", ".", "#"],
     "A": [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
     "B": ["####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."],
     "C": [".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."],
@@ -181,10 +182,13 @@ def icon_image(size):
 # that fits the field, so unused rungs cost PRG space, not memory.
 LADDER = 9
 DIGITS = "0123456789:.-%/ "
+# Big/medium also carry the letters of the start screen ("RUCK", "READY",
+# "GO!"), nothing more, to keep them small
+TITLE = DIGITS + "ACDEGKORUY!"
 
 
-def font_line(font_id, file, digits_only):
-    filt = f' filter="{DIGITS}"' if digits_only else ""
+def font_line(font_id, file, filt_chars):
+    filt = f' filter="{filt_chars}"' if filt_chars else ""
     return (f'    <font id="{font_id}" filename="{file}.fnt" '
             f'antialias="false"{filt} />\n')
 
@@ -207,11 +211,11 @@ def write_set(res_dir, width, icon_size, amoled):
     write_font(fonts, "big", big, amoled)
     write_font(fonts, "medium", med, amoled)
     write_font(fonts, "label", label, amoled)
-    xml = [font_line("Big", "big", True), font_line("Medium", "medium", True),
-           font_line("Label", "label", False)]
+    xml = [font_line("Big", "big", TITLE), font_line("Medium", "medium", TITLE),
+           font_line("Label", "label", None)]
     for i, p in enumerate(ladder(big, label)):
         write_font(fonts, f"v{i}", p, amoled)
-        xml.append(font_line(f"V{i}", f"v{i}", True))
+        xml.append(font_line(f"V{i}", f"v{i}", DIGITS))
     with open(os.path.join(fonts, "fonts.xml"), "w") as f:
         f.write("<fonts>\n" + "".join(xml) + "</fonts>\n")
     icon_image(icon_size).save(os.path.join(draw, "launcher_icon.png"))

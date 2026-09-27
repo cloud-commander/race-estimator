@@ -9,6 +9,13 @@
     <string id="LabelPack">PACK</string>
     <string id="UnitPerHour">/H</string>
 
+    <!-- Start screen (arcade attract mode) and start intro -->
+    <string id="Title">RUCK</string>
+    <string id="PressStart">PRESS START</string>
+    <string id="HiScore">HI-SCORE</string>
+    <string id="Ready">READY</string>
+    <string id="Go">GO!</string>
+
     <!-- On-watch settings menu -->
     <string id="MenuPack">Pack Weight</string>
     <string id="MenuWeightUnit">Weight</string>

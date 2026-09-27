@@ -244,6 +244,34 @@ module RuckViewTest {
       (b["pctShown"] as Lang.Number) == 31 && (b["warn"] as Lang.Boolean);
   }
 
+  // Before start: attract screen. Fresh start: 2-frame intro, skipped if
+  // the screen wasn't showing in the first seconds. Hi-score kept on save.
+  (:test)
+  function startScreenAndHiScore(logger as Test.Logger) as Lang.Boolean {
+    var view = setup(20.0, 0);
+    var info = newInfo();
+    info.timerState = Activity.TIMER_STATE_OFF;
+    view.compute(info);
+    var attract = view.testState()["attract"] as Lang.Boolean;
+    view.onTimerStart();
+    var s = view.testState();
+    var intro = s["intro"] as Lang.Number;
+    var attractAfter = s["attract"] as Lang.Boolean;
+    info.timerState = Activity.TIMER_STATE_ON;
+    run(view, info, 600, 1.5, 0.0);
+    var introLate = view.testState()["intro"] as Lang.Number;
+    view.onTimerPause(); // saves -> hi-score
+    s = view.testState();
+    var hi = f(s, "hi");
+    var stored = Application.Storage.getValue("ruckHi") as Lang.Numeric;
+    // A later start after a stop doesn't replay the intro
+    view.onTimerStart();
+    var introResume = view.testState()["intro"] as Lang.Number;
+    logger.debug("attract=" + attract + " intro=" + intro + " hi=" + hi);
+    return attract && intro == 2 && !attractAfter && introLate == 0 &&
+      hi >= f(s, "kcal") && near(stored.toFloat(), hi, 0.01) && introResume == 0;
+  }
+
   // Session stats: effort pace average, peak burn only after the first minute
   (:test)
   function sessionStats(logger as Test.Logger) as Lang.Boolean {
