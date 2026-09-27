@@ -120,3 +120,64 @@ function testCrossingLiveCelebratesOnce(logger as Test.Logger) as Lang.Boolean {
   Test.assert(!m.isCelebrating());
   return true;
 }
+
+// Test-only helpers (class-level (:test) keeps them out of app builds
+// without the runner executing them as tests)
+(:test)
+class PaceTestHelper {
+  // Feeds a run at `secPerKm` from `fromM` to `toM`, one sample per second
+  static function feedRun(
+    p as PaceEstimator,
+    startSec as Lang.Double,
+    fromM as Lang.Double,
+    toM as Lang.Double,
+    secPerKm as Lang.Double
+  ) as Lang.Double {
+    var t = startSec;
+    var d = fromM;
+    var step = 1000.0d / secPerKm; // metres per second
+    while (d < toM) {
+      t += 1.0d;
+      d += step;
+      p.update(t, d);
+    }
+    return t;
+  }
+}
+
+(:test)
+function testSteadyPaceProjectsNextMilestoneExactly(logger as Test.Logger) as Lang.Boolean {
+  var p = new PaceEstimator(false);
+  var t = PaceTestHelper.feedRun(p, 0.0d, 0.0d, 4000.0d, 300.0d); // 5:00/km
+  // Next km at 5:00/km; fatigue ~1 for 4 km -> 5 km
+  var ms = p.estimateRemainingMs(5000.0d);
+  logger.debug("remaining to 5K: " + ms);
+  Test.assert(ms > 295000 && ms < 310000);
+  Test.assert(t > 1190.0d && t < 1210.0d);
+  return true;
+}
+
+(:test)
+function testSlowdownPullsProjectionUp(logger as Test.Logger) as Lang.Boolean {
+  var p = new PaceEstimator(false);
+  var t = PaceTestHelper.feedRun(p, 0.0d, 0.0d, 20000.0d, 300.0d); // 20 km at 5:00/km
+  PaceTestHelper.feedRun(p, t, 20000.0d, 23000.0d, 420.0d); // then 3 km at 7:00/km
+  var avg = p.getAveragePace() * 1000.0d; // sec/km
+  var blended = p.getBlendedPace() * 1000.0d;
+  logger.debug("avg " + avg + " blended " + blended);
+  // Average barely moves (~5:15); blended reacts toward 7:00
+  Test.assert(avg < 330.0d);
+  Test.assert(blended > 360.0d && blended < 420.0d);
+  return true;
+}
+
+(:test)
+function testRiegelFatigueOnlyForFarMilestones(logger as Test.Logger) as Lang.Boolean {
+  var p = new PaceEstimator(false);
+  PaceTestHelper.feedRun(p, 0.0d, 0.0d, 10000.0d, 300.0d);
+  // 40 km left at 5:00/km = 12000 s flat; Riegel (50/10)^0.06 ~ 1.101
+  var ms = p.estimateRemainingMs(50000.0d);
+  logger.debug("remaining to 50K: " + ms);
+  Test.assert(ms > 13000000 && ms < 13400000);
+  return true;
+}

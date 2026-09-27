@@ -250,36 +250,28 @@ class RaceEstimatorView extends WatchUi.DataField {
       saveToStorage();
     }
 
-    // Predictions: gated on GPS quality, minimum distance and a warm estimator
+    // The pace model is fed every tick (the watch's distance is already
+    // filtered) so its rolling window has no gaps; only showing predictions
+    // is gated on GPS quality, minimum distance and warm-up
+    mPaceEstimator.update(timerTimeMs / 1000.0d, elapsedDistance.toDouble());
     var gpsOk = mDataValidator.validateGpsData(info);
     var canPredict =
-      gpsOk && mDataValidator.validateMinimumDistance(elapsedDistance);
-    if (canPredict) {
-      var timerTimeSec = timerTimeMs / 1000.0d;
-      // A rejected sample keeps the previous estimate rather than freezing
-      mPaceEstimator.updatePace(
-        timerTimeSec / elapsedDistance,
-        elapsedDistance,
-        timerTimeSec
-      );
-      canPredict =
-        mPaceEstimator.isWarmedUp() && mPaceEstimator.getSmoothedPace() > 0.0d;
-    }
-    var pace = mPaceEstimator.getSmoothedPace();
+      gpsOk &&
+      mDataValidator.validateMinimumDistance(elapsedDistance) &&
+      mPaceEstimator.isWarmedUp();
 
     // Every milestone shows a finish time: actual once reached, projected
-    // (elapsed + remaining distance at average pace) before that
+    // (see PaceEstimator) before that
     for (var i = 0; i < MILESTONE_COUNT; i++) {
       var finish = mMilestones.getMilestoneFinishTime(i);
       if (finish != null) {
         mTimes.setTime(i, finish);
       } else if (canPredict) {
-        var remainingM =
-          mMilestones.getMilestoneDistanceCm(i) / 100.0d - elapsedDistance;
-        if (remainingM < 0.0d) {
-          remainingM = 0.0d;
-        }
-        var projected = timerTimeMs + (remainingM * pace * 1000.0d).toNumber();
+        var projected =
+          timerTimeMs +
+          mPaceEstimator.estimateRemainingMs(
+            mMilestones.getMilestoneDistanceCm(i) / 100.0d
+          );
         if (projected > MAX_TIME_MS) {
           projected = MAX_TIME_MS;
         }
@@ -296,15 +288,13 @@ class RaceEstimatorView extends WatchUi.DataField {
       }
     }
 
-    updateSegmentAndSubline(elapsedDistance, timerTimeMs, pace, gpsOk, canPredict);
+    updateSegmentAndSubline(elapsedDistance, gpsOk, canPredict);
   }
 
   // Gauge fill and the one-line context under the hero:
   // "2.31 km in 11:04", or a status while not ready
   private function updateSegmentAndSubline(
     elapsedDistance as Lang.Float,
-    timerTimeMs as Lang.Number,
-    pace as Lang.Double,
     gpsOk as Lang.Boolean,
     canPredict as Lang.Boolean
   ) as Void {
@@ -347,7 +337,7 @@ class RaceEstimatorView extends WatchUi.DataField {
     if (!canPredict) {
       mSubText = distText + " TO GO";
     } else {
-      var remainingMs = (remainingM * pace * 1000.0d).toNumber();
+      var remainingMs = mPaceEstimator.estimateRemainingMs(nextM);
       if (remainingMs > MAX_TIME_MS) {
         remainingMs = MAX_TIME_MS;
       }

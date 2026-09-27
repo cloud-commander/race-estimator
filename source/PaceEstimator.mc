@@ -1,257 +1,154 @@
 using Toybox.Lang;
-using Toybox.System;
+using Toybox.Math;
 
-// Exponential Moving Average (EMA) pace estimator with FIT anomaly detection
-// Provides smoothed pace predictions with robust outlier filtering
+// Finish-time model.
+//
+// projected(D) = elapsed + (D - d) * blendedPace * fatigue(D, d)
+//
+// - blendedPace = 60% recent pace (rolling ~10 min window) + 40% whole-run
+//   average pace. Recent pace reacts when you slow down late in a long run;
+//   the average keeps a single fast downhill from swinging the projection.
+// - fatigue(D, d) = (D / d)^0.06, Riegel's endurance exponent (T2 = T1 *
+//   (D2/D1)^1.06) applied to the remaining distance. ~1.00 for the next
+//   milestone, ~1.10 for 50K when you are at 10K. d is floored at
+//   RIEGEL_MIN_DISTANCE_M so the first kilometre can't inflate it.
+//
+// Memory: two 61-slot arrays. CPU: one sample every 10 s, O(1) per query.
 class PaceEstimator {
+  private const SAMPLE_INTERVAL_SEC = 10.0d;
+  private const WINDOW_SLOTS = 61; // 60 intervals = 10 minutes
+  private const MIN_RECENT_DISTANCE_M = 200.0d; // need this much for a recent pace
+  private const RECENT_WEIGHT = 0.6d;
+  private const RIEGEL_EXPONENT = 0.06d;
+  private const RIEGEL_MIN_DISTANCE_M = 3000.0d;
+  private const WARMUP_SEC = 5.0d;
 
-  // EMA smoothing configuration
-  private const SMOOTHING_ALPHA = 0.15d;  // EMA weight for new samples
-  private const SMOOTHING_WINDOW_SEC = 5; // Minimum time before predictions are valid
+  // Sanity bounds (sec per metre)
+  private const PACE_MIN_SEC_PER_M = 0.05d; // 0:50/km, faster than any human
+  private const PACE_MAX_SEC_PER_M = 20.0d; // 5.5 h/km
 
-  // FIT anomaly detection thresholds
-  private const FIT_STAGNATION_THRESHOLD = 5;     // Consecutive identical distance readings
-  private const PACE_SPIKE_RATIO_MAX = 2.0;       // Max pace change ratio (200%)
-  private const PACE_SPIKE_RATIO_MIN = 0.5;       // Min pace change ratio (50%)
-  private const PACE_SPIKE_THRESHOLD = 3;         // Consecutive spikes before rejection
-  private const MAX_DELTA_TIME_SEC = 5.0d;        // Max time gap before reset
+  // Ring buffer of (timer seconds, distance metres)
+  private var mTimes as Lang.Array<Lang.Double>;
+  private var mDists as Lang.Array<Lang.Double>;
+  private var mHead as Lang.Number = 0; // next write slot
+  private var mCount as Lang.Number = 0;
+  private var mLastSampleSec as Lang.Double = -1.0d;
 
-  // Pace validation bounds
-  private const PACE_MIN_SEC_PER_M = 0.05;  // 0:50/km (faster than any human)
-  private const PACE_MAX_SEC_PER_M = 20.0;  // ~5.5 hours/km (walking)
+  private var mAveragePace as Lang.Double = 0.0d;
+  private var mBlendedPace as Lang.Double = 0.0d;
+  private var mElapsedSec as Lang.Double = 0.0d;
+  private var mDistanceM as Lang.Double = 0.0d;
 
-  // State tracking
-  private var mSmoothedPaceSecPerM as Lang.Double = 0.0d;
-  private var mLastComputeTimeSec as Lang.Double = 0.0d;
-  private var mSmoothingWindowFull as Lang.Boolean = false;
-
-  // Anomaly detection state
-  private var mLastValidDistance as Lang.Double = 0.0d;
-  private var mDistanceStagnationCount as Lang.Number = 0;
-  private var mLastValidPace as Lang.Double = 0.0d;
-  private var mPaceAnomalyCount as Lang.Number = 0;
-  private var mFirstPaceReadingDone as Lang.Boolean = false;
-
-  // Debug logging
-  private var mDebugLogging as Lang.Boolean = false;
-
-  /**
-   * Initialize pace estimator
-   * @param debugLogging Enable verbose logging
-   */
   function initialize(debugLogging as Lang.Boolean) {
-    mDebugLogging = debugLogging;
+    mTimes = new Lang.Array<Lang.Double>[WINDOW_SLOTS];
+    mDists = new Lang.Array<Lang.Double>[WINDOW_SLOTS];
     reset();
-
-    if (mDebugLogging) {
-      System.println("PaceEstimator: Initialized (alpha=" + SMOOTHING_ALPHA + ", window=" + SMOOTHING_WINDOW_SEC + "s)");
-    }
   }
 
-  /**
-   * Reset all estimator state
-   */
   public function reset() as Void {
-    mSmoothedPaceSecPerM = 0.0d;
-    mLastComputeTimeSec = 0.0d;
-    mSmoothingWindowFull = false;
-    mLastValidDistance = 0.0d;
-    mDistanceStagnationCount = 0;
-    mLastValidPace = 0.0d;
-    mPaceAnomalyCount = 0;
-    mFirstPaceReadingDone = false;
-
-    if (mDebugLogging) {
-      System.println("PaceEstimator: Reset");
+    for (var i = 0; i < WINDOW_SLOTS; i++) {
+      mTimes[i] = 0.0d;
+      mDists[i] = 0.0d;
     }
+    mHead = 0;
+    mCount = 0;
+    mLastSampleSec = -1.0d;
+    mAveragePace = 0.0d;
+    mBlendedPace = 0.0d;
+    mElapsedSec = 0.0d;
+    mDistanceM = 0.0d;
   }
 
   /**
-   * Update pace estimate with new activity data
-   * Performs EMA smoothing and anomaly filtering
-   * @param currentPaceSecPerM Current instantaneous pace (sec/meter)
-   * @param elapsedDistance Total elapsed distance (meters)
-   * @param timerTimeSec Current timer time (seconds)
-   * @return true if pace was accepted and updated, false if rejected
+   * Feed the current activity totals (call once per compute)
+   * @return true if a usable pace is available
    */
-  public function updatePace(
-    currentPaceSecPerM as Lang.Double,
-    elapsedDistance as Lang.Float,
-    timerTimeSec as Lang.Double
+  public function update(
+    timerTimeSec as Lang.Double,
+    elapsedDistanceM as Lang.Double
   ) as Lang.Boolean {
-
-    // Check if smoothing window is satisfied
-    if (!mSmoothingWindowFull && timerTimeSec >= SMOOTHING_WINDOW_SEC) {
-      mSmoothingWindowFull = true;
-      if (mDebugLogging) {
-        System.println("PaceEstimator: Smoothing window satisfied");
-      }
-    }
-
-    // Detect time jumps (pause/resume, simulator glitches)
-    var deltaTimeSec = timerTimeSec - mLastComputeTimeSec;
-    if (mLastComputeTimeSec > 0.0 && deltaTimeSec.abs() > MAX_DELTA_TIME_SEC) {
-      if (mDebugLogging) {
-        System.println("PaceEstimator: Time jump detected (" + deltaTimeSec + "s), resetting");
-      }
-      mSmoothedPaceSecPerM = 0.0d;
-      mPaceAnomalyCount = 0;
-    }
-
-    mLastComputeTimeSec = timerTimeSec;
-
-    // Validate pace is within reasonable bounds
-    if (currentPaceSecPerM < PACE_MIN_SEC_PER_M || currentPaceSecPerM > PACE_MAX_SEC_PER_M) {
-      if (mDebugLogging) {
-        System.println("PaceEstimator: Pace out of bounds (" + currentPaceSecPerM + "), rejected");
-      }
+    if (elapsedDistanceM <= 0.0d || timerTimeSec <= 0.0d) {
       return false;
     }
 
-    // Detect distance stagnation (FIT file replay, GPS freeze)
-    if (!detectDistanceStagnation(elapsedDistance)) {
-      if (mDebugLogging) {
-        System.println("PaceEstimator: Distance stagnation detected, rejected");
-      }
-      return false;
+    // Timer went backwards (activity reset without onTimerReset): start over
+    if (timerTimeSec < mLastSampleSec) {
+      reset();
     }
 
-    // Detect pace spikes (GPS glitches, sudden speed changes)
-    if (!detectPaceSpike(currentPaceSecPerM)) {
-      if (mDebugLogging) {
-        System.println("PaceEstimator: Pace spike detected, rejected");
+    mElapsedSec = timerTimeSec;
+    mDistanceM = elapsedDistanceM;
+
+    if (
+      mLastSampleSec < 0.0d ||
+      timerTimeSec - mLastSampleSec >= SAMPLE_INTERVAL_SEC
+    ) {
+      mTimes[mHead] = timerTimeSec;
+      mDists[mHead] = elapsedDistanceM;
+      mHead = (mHead + 1) % WINDOW_SLOTS;
+      if (mCount < WINDOW_SLOTS) {
+        mCount++;
       }
-      return false;
+      mLastSampleSec = timerTimeSec;
     }
 
-    // All validations passed - update smoothed pace
-    if (mSmoothedPaceSecPerM == 0.0d) {
-      // Initialize with first valid reading
-      mSmoothedPaceSecPerM = currentPaceSecPerM;
-      if (mDebugLogging) {
-        System.println("PaceEstimator: Initialized with pace " + currentPaceSecPerM);
-      }
-    } else {
-      // Apply EMA smoothing
-      mSmoothedPaceSecPerM =
-        SMOOTHING_ALPHA * currentPaceSecPerM +
-        (1.0 - SMOOTHING_ALPHA) * mSmoothedPaceSecPerM;
+    var average = timerTimeSec / elapsedDistanceM;
+    if (average < PACE_MIN_SEC_PER_M || average > PACE_MAX_SEC_PER_M) {
+      return mBlendedPace > 0.0d; // keep the last good estimate
     }
+    mAveragePace = average;
 
+    var recent = getRecentPace();
+    mBlendedPace = recent > 0.0d
+      ? RECENT_WEIGHT * recent + (1.0d - RECENT_WEIGHT) * average
+      : average;
     return true;
   }
 
-  /**
-   * Get current smoothed pace estimate
-   * @return Smoothed pace in seconds per meter
-   */
-  public function getSmoothedPace() as Lang.Double {
-    return mSmoothedPaceSecPerM;
+  // Pace over the rolling window (oldest sample -> now), or 0 if the window
+  // hasn't covered enough distance yet
+  public function getRecentPace() as Lang.Double {
+    if (mCount < 2) {
+      return 0.0d;
+    }
+    var oldest = mCount < WINDOW_SLOTS ? 0 : mHead;
+    var dt = mElapsedSec - mTimes[oldest];
+    var dd = mDistanceM - mDists[oldest];
+    if (dd < MIN_RECENT_DISTANCE_M || dt <= 0.0d) {
+      return 0.0d;
+    }
+    var pace = dt / dd;
+    if (pace < PACE_MIN_SEC_PER_M || pace > PACE_MAX_SEC_PER_M) {
+      return 0.0d;
+    }
+    return pace;
   }
 
-  /**
-   * Check if estimator has warmed up (received enough data)
-   * @return true if smoothing window is full
-   */
+  public function getAveragePace() as Lang.Double {
+    return mAveragePace;
+  }
+
+  public function getBlendedPace() as Lang.Double {
+    return mBlendedPace;
+  }
+
   public function isWarmedUp() as Lang.Boolean {
-    return mSmoothingWindowFull;
+    return mElapsedSec >= WARMUP_SEC && mBlendedPace > 0.0d;
   }
 
   /**
-   * Detect if distance is stagnating (GPS frozen, FIT replay)
-   * @param elapsedDistance Current total distance
-   * @return true if distance is changing normally, false if stagnant
+   * Projected time (ms) to cover the rest of the way to targetM from the
+   * current distance, including the Riegel fatigue factor
    */
-  private function detectDistanceStagnation(elapsedDistance as Lang.Float) as Lang.Boolean {
-    var distAsDouble = elapsedDistance.toDouble();
-
-    if (distAsDouble == mLastValidDistance) {
-      // Distance hasn't changed
-      mDistanceStagnationCount++;
-      if (mDistanceStagnationCount >= FIT_STAGNATION_THRESHOLD) {
-        // Too many consecutive identical readings
-        return false;
-      }
-    } else {
-      // Distance changed - reset counter
-      mDistanceStagnationCount = 0;
-      mLastValidDistance = distAsDouble;
-    }
-
-    return true;
-  }
-
-  /**
-   * Detect sudden pace changes (GPS glitches, sprint/stop)
-   * Uses ratio-based detection to handle all pace ranges
-   * @param pace Current pace in sec/meter
-   * @return true if pace change is reasonable, false if spike detected
-   */
-  private function detectPaceSpike(pace as Lang.Double) as Lang.Boolean {
-    if (!mFirstPaceReadingDone) {
-      // First reading - accept and initialize
-      mLastValidPace = pace;
-      mFirstPaceReadingDone = true;
-      return true;
-    }
-
-    if (mLastValidPace > 0.0) {
-      // Calculate pace change ratio
-      var paceRatio = pace / mLastValidPace;
-
-      // Check if ratio is outside acceptable range
-      if (paceRatio > PACE_SPIKE_RATIO_MAX || paceRatio < PACE_SPIKE_RATIO_MIN) {
-        // Potential spike detected
-        mPaceAnomalyCount++;
-        if (mPaceAnomalyCount >= PACE_SPIKE_THRESHOLD) {
-          // Too many consecutive spikes - reject
-          return false;
-        }
-      } else {
-        // Normal pace change - reset anomaly counter
-        mPaceAnomalyCount = 0;
-      }
-    }
-
-    // Update last valid pace
-    mLastValidPace = pace;
-    return true;
-  }
-
-  /**
-   * Calculate estimated time to complete remaining distance
-   * @param remainingDistanceMeters Distance remaining to target
-   * @return Estimated time in milliseconds, or null if not ready
-   */
-  public function estimateTimeRemaining(remainingDistanceMeters as Lang.Double) as Lang.Number? {
-    // Only provide estimates if warmed up and have valid pace
-    if (!mSmoothingWindowFull || mSmoothedPaceSecPerM == 0.0d) {
-      return null;
-    }
-
-    if (remainingDistanceMeters <= 0.0) {
+  public function estimateRemainingMs(targetM as Lang.Double) as Lang.Number {
+    var remaining = targetM - mDistanceM;
+    if (remaining <= 0.0d || mBlendedPace <= 0.0d) {
       return 0;
     }
-
-    // Calculate time: distance * pace
-    var timeSeconds = remainingDistanceMeters * mSmoothedPaceSecPerM;
-    var timeMs = (timeSeconds * 1000.0d).toNumber();
-
-    return timeMs;
-  }
-
-  /**
-   * Get diagnostics for debugging
-   * @return Dictionary with current state
-   */
-  public function getDiagnostics() as Lang.Dictionary {
-    return {
-      "smoothedPace" => mSmoothedPaceSecPerM,
-      "warmedUp" => mSmoothingWindowFull,
-      "stagnationCount" => mDistanceStagnationCount,
-      "anomalyCount" => mPaceAnomalyCount,
-      "lastPace" => mLastValidPace,
-      "lastDistance" => mLastValidDistance
-    };
+    var from = mDistanceM > RIEGEL_MIN_DISTANCE_M ? mDistanceM : RIEGEL_MIN_DISTANCE_M;
+    var fatigue = targetM > from
+      ? Math.pow(targetM / from, RIEGEL_EXPONENT).toDouble()
+      : 1.0d;
+    return (remaining * mBlendedPace * fatigue * 1000.0d).toNumber();
   }
 }
