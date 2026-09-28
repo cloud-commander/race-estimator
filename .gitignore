@@ -4,6 +4,11 @@
 developer_key
 developer_key.der
 *.der
+*.pem
+*.p12
+*.key
+.env
+.env.*
 # Compiler intermediates
 build/gen/
 build/external-mir/
@@ -14,4 +19,9 @@ build/*-settings.json
 # Raw activity files (GPS tracks); use tools/fit_to_replay.py for fixtures
 *.fit
 *.FIT
+*.gpx
+*.GPX
+*.tcx
+*.TCX
 __pycache__/
+firmware/

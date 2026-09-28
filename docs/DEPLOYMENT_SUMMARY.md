@@ -209,7 +209,7 @@ If anomaly detection causes issues:
 Run validation suite:
 
 ```bash
-cd /Users/georgediavatis/Storage/Development/garmin-lastsplit
+cd ~/path/to/garmin-lastsplit
 python3 validate_fit_anomaly_detection.py
 ```
 
