@@ -96,6 +96,7 @@ class CoachManager {
   private var mLastFuelSec as Lang.Double = 0.0d;
   private var mFuelSetting as Lang.Number = FUEL_AUTO; // minutes, 0 off
   private var mGoalMs as Lang.Number = 0; // target race goal, 0 = none
+  private var mGoalIsBest as Lang.Boolean = false; // goal is the high score
   private var mStreak as Lang.Number = 0;
   private var mPaceCount as Lang.Number = 0; // rotates pace phrasing
   private var mBossQuarter as Lang.Number = 0; // boss HP quarters announced
@@ -136,7 +137,13 @@ class CoachManager {
 
   // Goal finish time for the target race in ms (0 = no goal)
   public function setGoalMs(goalMs as Lang.Number) as Void {
+    setGoal(goalMs, false);
+  }
+
+  // isBest: the goal is the high score (no goal set), so messages say BEST
+  public function setGoal(goalMs as Lang.Number, isBest as Lang.Boolean) as Void {
     mGoalMs = goalMs > 0 ? goalMs : 0;
+    mGoalIsBest = isBest;
   }
 
   // Fuel reminder interval in minutes: FUEL_AUTO, 0 = off, else every N min
@@ -483,17 +490,31 @@ class CoachManager {
     targetFinishMs as Lang.Number
   ) as Void {
     var delta = targetFinishMs - mGoalMs; // > 0 = behind
+    var word = mGoalIsBest ? "BEST" : "GOAL";
     if (phase == 0 && targetFinishMs < mGoalMs * GOAL_TOO_FAST_RATIO) {
       mStageFlags |= F_PACE;
-      show(pick(["TOO FAST FOR GOAL", "EASE TO GOAL PACE"], mPaceCount), true, nowSec);
+      show(
+        pick(["TOO FAST FOR " + word, mGoalIsBest ? "EASE TO BEST PACE" : "EASE TO GOAL PACE"], mPaceCount),
+        true,
+        nowSec
+      );
       return;
     }
     if (delta <= GOAL_ON_PACE_MS && delta >= -GOAL_ON_PACE_MS) {
-      show(pick(["ON GOAL PACE", "RIGHT ON GOAL", "GOAL LOCKED IN"], mStage), false, nowSec);
+      show(
+        pick(
+          mGoalIsBest
+            ? ["ON RECORD PACE", "HI-SCORE IN SIGHT", "RECORD IN REACH"]
+            : ["ON GOAL PACE", "RIGHT ON GOAL", "GOAL LOCKED IN"],
+          mStage
+        ),
+        false,
+        nowSec
+      );
     } else if (delta < 0) {
-      show(fit(formatDuration(-delta) + " UNDER GOAL", "UNDER GOAL"), false, nowSec);
+      show(fit(formatDuration(-delta) + " UNDER " + word, "UNDER " + word), false, nowSec);
     } else {
-      show(fit(formatDuration(delta) + " OVER GOAL", "OVER GOAL"), true, nowSec);
+      show(fit(formatDuration(delta) + " OVER " + word, "OVER " + word), true, nowSec);
     }
   }
 

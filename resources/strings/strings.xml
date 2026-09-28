@@ -28,7 +28,9 @@
     <string id="FitMinutes">min</string>
     <string id="GoalHoursTitle">Goal time: hours</string>
     <string id="GoalMinutesTitle">Goal time: minutes</string>
-    <string id="GoalPrompt">Finish goal for the target race. 0:00 turns goal coaching off.</string>
+    <string id="GoalPrompt">Finish goal for the target race. 0:00 = no goal: you race your high score instead.</string>
+    <string id="GoalTitle">Goal time</string>
+    <string id="GoalOff">Off: beat hi-score</string>
     <string id="FuelTitle">Fuel reminders</string>
     <string id="FuelAuto">Auto (40 min, half marathon+)</string>
     <string id="FuelOff">Off</string>

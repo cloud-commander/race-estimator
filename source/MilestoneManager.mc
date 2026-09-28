@@ -156,6 +156,12 @@ class MilestoneManager {
     return -1;
   }
 
+  // The long fanfare: the target and every bonus milestone past it (or the
+  // last milestone when no target is set)
+  private function isFanfare(idx as Lang.Number) as Lang.Boolean {
+    return (mFanfareIdx >= 0 && idx >= mFanfareIdx) || idx == mMilestoneCount - 1;
+  }
+
   // Milestone that plays the long fanfare (the target race)
   public function setFanfareIdx(idx as Lang.Number) as Void {
     mFanfareIdx = idx;
@@ -322,7 +328,7 @@ class MilestoneManager {
       mCelebrationStartTimeMs = timerTimeMs;
       mCelebrationMilestoneIdx = celebrateIdx;
       mLiveCrossingIdx = celebrateIdx;
-      playFeedback(celebrateIdx == mFanfareIdx || celebrateIdx == mMilestoneCount - 1);
+      playFeedback(isFanfare(celebrateIdx));
     }
 
     // Check if celebration period has ended
@@ -499,7 +505,7 @@ class MilestoneManager {
     // Mark completion
     mFinishTimesMs[idx] = timeMs;
 
-    playFeedback(idx == mFanfareIdx || idx == mMilestoneCount - 1);
+    playFeedback(isFanfare(idx));
 
     if (mDebugLogging) {
       System.println(

@@ -11,13 +11,13 @@ Race Estimator is a compact Garmin Connect IQ data field that predicts finish ti
 Why use it
 
 - Provides continuously-updating finish time estimates for milestones (5K, 10K, half, marathon, etc.) while you run.
-- Shows only the most relevant information: three milestone predictions at a time with a simple status line.
+- Shows only the most relevant information: the next milestone's predicted finish, a status / coach line and your current pace.
 
 Highlights — what the data field does
 
 - Inputs: GPS-derived elapsed distance and timestamps (Activity.Info), optional user profile for unit conversions.
-- Outputs: up to three milestone predictions formatted as time-to-finish (m:ss or h:mm:ss) and a short status (WAITING GPS, WARMUP, PREDICTING, FINISHED).
-- UI: compact 3-row display designed for single-field layouts; AMOLED-safe colors and periodic position shifts to reduce burn-in.
+- Outputs: the next milestone's predicted finish (m:ss or h:mm:ss), a short status or coach line, and current pace.
+- UI: single-field layout with a level-map arc; AMOLED-safe colors and periodic position shifts to reduce burn-in.
 - Behavior: predictions start after a short warmup (requires ≥100 m of distance and a smoothing window). As milestones are hit the display rotates to the next upcoming milestones.
 - Constraints: compute() is optimized to avoid dynamic allocations and run every second; avoid heavy work in onUpdate().
 - Edge cases handled: GPS accuracy checks, minimum-distance gating to avoid wildly inaccurate early predictions, FIT anomaly detection (distance stagnation and pace spikes), and time-skip mitigations.
@@ -56,13 +56,13 @@ macOS
 
 ### Settings
 
-Set in Garmin Connect (phone) or Connect IQ → the data field → Settings:
+On the watch: activity settings → Data Screens → the Race Estimator field → Settings (target race, custom distance, goal time). All settings are also in Garmin Connect (phone) → the data field → Settings:
 
 | Setting | Default | What it does |
 |---|---|---|
 | Target race | Marathon | Sets the level-map arc, race thirds and "boss" stage. *Custom distance* adds your own milestone (1–250 km) |
 | Custom distance (km) | 15 | Used when Target race is Custom distance |
-| Goal time (hours, minutes) | 0:00 (off) | Coach compares projected finish with the goal once per stage ("1:20 UNDER GOAL") and flags a start that is too fast for it |
+| Goal time (hours, minutes) | 0:00 (off) | Coach compares projected finish with the goal once per stage ("1:20 UNDER GOAL") and flags a start that is too fast for it. With no goal set, your high score for the target is the goal ("1:20 UNDER BEST") |
 | Fuel reminders | Auto | Auto = every 40 min on half marathon and longer; Off; or every 20–60 min on any race |
 | Coach vibration | Warnings only | Buzz on coach messages: off, warnings only, or all |
 | Lap button syncs to course markers | Off | Press lap at an official km / mile sign to correct GPS distance from there on (auto-lap is ignored) |
@@ -71,11 +71,14 @@ Set in Garmin Connect (phone) or Connect IQ → the data field → Settings:
 ### Features
 
 - **Attract mode**: before you start, the arc runs a chase with READY / PRESS START, your hi-score and goal; "GO!" when the timer starts.
+- **Running screen**: next milestone, its projected finish time underneath, a context / coach line, and your current pace (watch pace units).
 - **Level map**: the arc is the target race in thirds, with milestone pips, a boss pip and a player marker.
 - **Pace model**: grade-adjusted recent pace blended with the run average; a wall fade past 30 km only.
 - **Coach**: race segmentation, pace, hill, goal and fuel cues (see `source/CoachManager.mc`).
 - **High scores and ghost**: best time per distance. When the target is a new best, its splits become the ghost you race next time ("GHOST -0:40" at each milestone).
-- **Results screen**: stop the timer after the target to see NEW HIGH SCORE / GOAL CLEAR / GAME OVER, the goal margin, previous best and max combo.
+- **Goal praise**: no goal set? You race your high score instead. Finish under your goal time and the finish line and results screen show GOAL CLEAR!, the margin and praise (bigger for 3%+ under). Just missing it gets SO CLOSE!.
+- **Bonus stages**: every milestone past the target (set out for a 10K, ran a half) gets the long fanfare and extra celebration ("HALF UNLOCKED!", "BONUS X3").
+- **Results screen**: stop the timer after the target to see the goal verdict, NEW HIGH SCORE, bonus stages (or GAME OVER), then previous best and max combo.
 - **Garmin Connect charts**: projected finish is recorded every second; target time and goal margin go in the activity summary.
 - **Indoor**: treadmill / indoor profiles skip the GPS gate and ignore altitude.
 
@@ -154,7 +157,7 @@ Developer key (important)
 Usage (on the watch)
 
 1. Add the "Race Estimator" data field to a running activity screen.
-2. Use a 1-field layout to see three milestones, HR and remaining distance. In 2/3/4-field layouts the field shows only the next milestone.
+2. Use a 1-field layout to see the next milestone, its projected time, coach messages and current pace. In 2/3/4-field layouts the field shows only the next milestone and its time.
 3. Wait for GPS lock; the data field requires ≥100 m of recorded distance and a short smoothing window before stable predictions appear.
 
 Supported / tested targets

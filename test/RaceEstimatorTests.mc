@@ -412,6 +412,25 @@ function testCoachGoalReportsBehindAndStaysQuietWithoutGoal(logger as Test.Logge
   }
   Test.assert(found);
 
+  // High score as the goal: same cues, worded against the best
+  var bm = new MilestoneManager(9, 3, false);
+  var bc = new CoachManager(bm, false);
+  bc.setGoal(45 * 60000, true);
+  var best = PaceTestHelper.coachRun(bm, bc, 2, 4000.0d, 300.0d);
+  logger.debug(best.toString());
+  var bestFound = false;
+  for (var i = 0; i < best.size(); i++) {
+    Test.assert(best[i].find("GOAL") == null);
+    if (best[i].find(" OVER BEST") != null) {
+      bestFound = true;
+    }
+  }
+  Test.assert(bestFound);
+  var cues = ["TOO FAST FOR BEST", "EASE TO BEST PACE", "ON RECORD PACE", "HI-SCORE IN SIGHT", "RECORD IN REACH", "4:50 UNDER BEST"];
+  for (var i = 0; i < cues.size(); i++) {
+    Test.assert(pixelColumns(cues[i]) <= CoachManager.MAX_COLUMNS);
+  }
+
   // No goal: no goal messages at all
   var offm = new MilestoneManager(9, 3, false);
   var off = new CoachManager(offm, false);

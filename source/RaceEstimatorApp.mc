@@ -23,6 +23,13 @@ class RaceEstimatorApp extends Application.AppBase {
     WatchUi.requestUpdate();
   }
 
+  // On-watch settings (activity menu > Data Screens > this field), see
+  // SettingsMenu
+  function getSettingsView() as [WatchUi.Views] or [WatchUi.Views, WatchUi.InputDelegates] or Null {
+    var menu = new SettingsMenu();
+    return [menu, new SettingsMenuDelegate(menu)];
+  }
+
   //! Return the initial view of your application here
   function getInitialView() {
     var view = new RaceEstimatorView();

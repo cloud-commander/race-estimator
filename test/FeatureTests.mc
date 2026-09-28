@@ -397,3 +397,174 @@ function testViewCustomTargetAndLapSync(logger as Test.Logger) as Lang.Boolean {
   }
   return true;
 }
+
+// Goal setting -> finish: the real 4:55:07 marathon against a 5:00 goal
+// gets GOAL CLEAR!, the margin and praise; against 4:50 it is a near miss
+(:test)
+function testGoalPraiseAtFinish(logger as Test.Logger) as Lang.Boolean {
+  var keys = ["targetRace", "goalHours", "goalMinutes"];
+  var saved = [] as Lang.Array<Application.PropertyValueType>;
+  for (var k = 0; k < keys.size(); k++) {
+    saved.add(Application.Properties.getValue(keys[k]));
+  }
+  try {
+    Application.Properties.setValue("targetRace", 7); // marathon
+    Application.Properties.setValue("goalHours", 5);
+    Application.Properties.setValue("goalMinutes", 0);
+    var beat = FinishHelper.framesFor(new RaceEstimatorView());
+    logger.debug("goal 5:00 -> " + beat.toString());
+    Test.assert(beat[0].equals("GOAL CLEAR!"));
+    Test.assert(beat[1].find(" UNDER GOAL") != null);
+    Test.assert(beat.size() >= 4);
+    Test.assert(beat.indexOf("GAME OVER") < 0);
+
+    Application.Properties.setValue("goalMinutes", 50);
+    Application.Properties.setValue("goalHours", 4);
+    var miss = FinishHelper.framesFor(new RaceEstimatorView());
+    logger.debug("goal 4:50 -> " + miss.toString());
+    Test.assert(miss[0].find(" OVER GOAL") != null);
+    Test.assert(miss.indexOf("SO CLOSE!") >= 0);
+    Test.assert(miss.indexOf("GOAL CLEAR!") < 0);
+
+    for (var i = 0; i < beat.size(); i++) {
+      Test.assert(pixelColumns(beat[i]) <= CoachManager.MAX_COLUMNS);
+    }
+  } finally {
+    for (var k = 0; k < keys.size(); k++) {
+      Application.Properties.setValue(keys[k], saved[k]);
+    }
+  }
+  return true;
+}
+
+// Replays the marathon through a fresh view, stops the timer and returns
+// the results screen frames
+(:test)
+class FinishHelper {
+static function framesFor(v as RaceEstimatorView) as Lang.Array<Lang.String> {
+  var n = ReplayHelper.size();
+  for (var i = 0; i < n; i++) {
+    v.compute(ReplayHelper.info(i, 1.0d));
+  }
+  var info = ReplayHelper.info(n - 1, 1.0d);
+  info.timerState = Activity.TIMER_STATE_STOPPED;
+  v.compute(info);
+  Test.assert(v.isShowingResults());
+  return v.getResultFrames();
+}
+}
+
+// No goal set: the high score for the target is the goal. Beating it
+// reads NEW HIGH SCORE! (once) with the margin UNDER BEST and praise; the
+// next run races the new best.
+(:test)
+function testHighScoreIsGoalWhenNoneSet(logger as Test.Logger) as Lang.Boolean {
+  var saved = GoalProps.save(0, 0);
+  try {
+    var v = new RaceEstimatorView();
+    Test.assert(!v.isGoalFromBest());
+    v.recordHighScoreForTest(4219500, 5 * 3600000);
+    Test.assert(v.isGoalFromBest());
+    Test.assertEqual(v.getGoalMs(), 5 * 3600000);
+    var beat = FinishHelper.framesFor(v);
+    logger.debug("best 5:00 -> " + beat.toString());
+    Test.assert(beat[0].equals("NEW HIGH SCORE!"));
+    Test.assert(beat[1].find(" UNDER BEST") != null);
+    Test.assert(beat.indexOf("GOAL CLEAR!") < 0);
+    Test.assert(beat.slice(1, null).indexOf("NEW HIGH SCORE!") < 0);
+    // Next run races the new best (this run's finish)
+    v.onTimerReset();
+    Test.assert(v.isGoalFromBest());
+    Test.assert(v.getGoalMs() < 5 * 3600000);
+  } finally {
+    GoalProps.restore(saved);
+  }
+  return true;
+}
+
+// Just missing the best is SO CLOSE!; a goal time set wins over the best
+(:test)
+function testHighScoreGoalNearMissAndOverride(logger as Test.Logger) as Lang.Boolean {
+  var saved = GoalProps.save(0, 0);
+  try {
+    var w = new RaceEstimatorView();
+    w.recordHighScoreForTest(4219500, 4 * 3600000 + 50 * 60000);
+    var miss = FinishHelper.framesFor(w);
+    logger.debug("best 4:50 -> " + miss.toString());
+    Test.assert(miss[0].find(" OVER BEST") != null);
+    Test.assert(miss.indexOf("SO CLOSE!") >= 0);
+    Test.assert(miss.indexOf("GAME OVER") >= 0);
+    Application.Properties.setValue("goalHours", 4);
+    w.loadSettings();
+    Test.assert(!w.isGoalFromBest());
+    Test.assertEqual(w.getGoalMs(), 4 * 3600000);
+  } finally {
+    GoalProps.restore(saved);
+  }
+  return true;
+}
+
+// Marathon target with the given goal; save() returns the old values
+(:test)
+class GoalProps {
+static const KEYS = ["targetRace", "goalHours", "goalMinutes"];
+
+static function save(hours as Lang.Number, minutes as Lang.Number) as Lang.Array {
+  var saved = [];
+  for (var k = 0; k < KEYS.size(); k++) {
+    saved.add(Application.Properties.getValue(KEYS[k]));
+  }
+  Application.Properties.setValue("targetRace", 7);
+  Application.Properties.setValue("goalHours", hours);
+  Application.Properties.setValue("goalMinutes", minutes);
+  return saved;
+}
+
+static function restore(saved as Lang.Array) as Void {
+  for (var k = 0; k < KEYS.size(); k++) {
+    Application.Properties.setValue(KEYS[k], saved[k] as Application.PropertyValueType);
+  }
+}
+}
+
+// Target 10K but the run keeps going: every milestone past it is a bonus
+// stage with extra praise, and the results screen counts them
+(:test)
+function testBonusStagesPastTarget(logger as Test.Logger) as Lang.Boolean {
+  var saved = Application.Properties.getValue("targetRace");
+  try {
+    Application.Properties.setValue("targetRace", 2); // 10K
+    var v = new RaceEstimatorView();
+    Test.assertEqual(v.getTargetIdx(), 2);
+    var bonusSeen = 0;
+    var lastFrames = null;
+    var i = 0;
+    while (ReplayHelper.distM(i) < 21300.0d) {
+      v.compute(ReplayHelper.info(i, 1.0d));
+      var f = v.getCelebFrames();
+      if (f != lastFrames && f.size() > 0) {
+        lastFrames = f;
+        logger.debug((ReplayHelper.distM(i) / 1000).format("%.2f") + " km  " + f.toString());
+        for (var k = 0; k < f.size(); k++) {
+          Test.assert(pixelColumns(f[k]) <= CoachManager.MAX_COLUMNS);
+          if (f[k].find("BONUS X") == 0) {
+            bonusSeen++;
+          }
+        }
+      }
+      i++;
+    }
+    // 10 mi (or 15K) and the half at least
+    Test.assert(bonusSeen >= 2);
+    var info = ReplayHelper.info(i, 1.0d);
+    info.timerState = Activity.TIMER_STATE_STOPPED;
+    v.compute(info);
+    var r = v.getResultFrames();
+    logger.debug("results " + r.toString());
+    Test.assert(r[0].find("BONUS STAGES X") == 0);
+    Test.assert(r.indexOf("GAME OVER") < 0);
+  } finally {
+    Application.Properties.setValue("targetRace", saved);
+  }
+  return true;
+}

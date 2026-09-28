@@ -42,6 +42,9 @@ class RaceEstimatorView extends WatchUi.DataField {
   private const FS_HERO_MAX_H = 0.22;
   private const FS_HERO_MAX_W = 0.64;
   private const FS_SUB_MAX_W = 0.8;
+  // Current pace, under the context line (running screen only)
+  private const FS_PACE_Y = 0.67;
+  private const FS_PACE_MAX_H = 0.1;
   // Compact layout (2/3/4-field)
   private const CP_TITLE_Y = 0.24;
   private const CP_VALUE_Y = 0.56;
@@ -64,8 +67,11 @@ class RaceEstimatorView extends WatchUi.DataField {
   private const HERO_SAMPLE = "00:00";
   private const HERO_LONG_SAMPLE = "0:00:00";
   private const TITLE_SAMPLE = "MARATHON";
-  private const TABLE_SAMPLE = "^ MARATHON  0:00:00";
+  private const TABLE_SAMPLE = "MAX COMBO  0:00:00";
   private const SUB_SAMPLE = "00.00 KM IN 0:00:00";
+  private const PACE_SAMPLE = "00:00 /KM";
+  // Slower than this (m/s, ~33 min/km) shows no pace: standing still
+  private const MIN_PACE_SPEED = 0.5f;
 
   // Core business logic
   private var mMilestones as MilestoneManager;
@@ -120,7 +126,11 @@ class RaceEstimatorView extends WatchUi.DataField {
   private const MAX_CUSTOM_KM = 250.0d;
   private var mTargetIdx as Lang.Number = DEFAULT_TARGET_IDX;
   private var mTargetCm as Lang.Number = 4219500;
+  // Goal in effect: the goal time setting, or with none set the high score
+  // for the target (beat your best), frozen at the start of the run
   private var mGoalMs as Lang.Number = 0;
+  private var mUserGoalMs as Lang.Number = 0;
+  private var mGoalFromBest as Lang.Boolean = false;
   private var mMapEndIdx as Lang.Number = DEFAULT_TARGET_IDX;
   private var mMapFraction as Lang.Double = 0.0d;
   private var mPhaseColors as Lang.Array<Lang.Number> = [0, 0, 0] as Lang.Array<Lang.Number>;
@@ -132,7 +142,7 @@ class RaceEstimatorView extends WatchUi.DataField {
   private var mLastCoachSeq as Lang.Number = 0;
 
   // Celebration frames cycled on the context line, 1 per second:
-  // STAGE CLEAR! -> split -> NEW HIGH SCORE! -> ghost -> combo
+  // STAGE CLEAR! -> split -> goal (target) -> NEW HIGH SCORE! -> ghost -> combo
   private var mCelebFrames as Lang.Array<Lang.String> = [] as Lang.Array<Lang.String>;
   private var mCelebColors as Lang.Array<Lang.Number> = [] as Lang.Array<Lang.Number>;
 
@@ -141,6 +151,11 @@ class RaceEstimatorView extends WatchUi.DataField {
   private var mTargetNewHigh as Lang.Boolean = false;
   private var mPrevBestMs as Lang.Number? = null;
   private var mShowResults as Lang.Boolean = false;
+  // Results screen frames, cycled 1 per second (built once per stop)
+  private var mResultFrames as Lang.Array<Lang.String> = [] as Lang.Array<Lang.String>;
+  private var mResultColors as Lang.Array<Lang.Number> = [] as Lang.Array<Lang.Number>;
+  // Goal beaten by at least this fraction: top-tier praise
+  private const GOAL_LEGEND_FRACTION = 0.03d;
   // Attract mode until the timer starts, then "GO!" for the first seconds
   private const GO_MS = 4000;
   private var mStarted as Lang.Boolean = false;
@@ -187,7 +202,10 @@ class RaceEstimatorView extends WatchUi.DataField {
   private var mOx as Lang.Number = 0;
   private var mOy as Lang.Number = 0;
   // Milestones shown in the two table rows under the hero (no per-frame alloc)
-  private var mTableIdx as Lang.Array<Lang.Number> = [0, 0] as Lang.Array<Lang.Number>;
+  private var mPaceY as Lang.Number = 0;
+  private var mPaceFont as Graphics.FontType = Graphics.FONT_XTINY;
+  private var mPaceText as Lang.String = "--:--";
+  private var mPaceStatute as Lang.Boolean = false;
 
   private var mLastKnownBackground as Lang.Number = -1;
   private var mPhase as Lang.Number = 0;
@@ -200,6 +218,7 @@ class RaceEstimatorView extends WatchUi.DataField {
       mIsAmoled = settings.requiresBurnInProtection;
     }
     mUseStatute = settings.distanceUnits == System.UNIT_STATUTE;
+    mPaceStatute = settings.paceUnits == System.UNIT_STATUTE;
 
     mMilestones = new MilestoneManager(
       STANDARD_COUNT,
@@ -227,6 +246,7 @@ class RaceEstimatorView extends WatchUi.DataField {
     loadSettings();
 
     loadFromStorage();
+    refreshGoal(); // a restored run may have finished the target already
     mSubText = "GET READY";
   }
 
@@ -271,8 +291,8 @@ class RaceEstimatorView extends WatchUi.DataField {
     var goalMin =
       (hours >= 0 && hours < 24 ? hours : 0) * 60 +
       (minutes >= 0 && minutes < 60 ? minutes : 0);
-    mGoalMs = goalMin * 60000;
-    mCoach.setGoalMs(mGoalMs);
+    mUserGoalMs = goalMin * 60000;
+    refreshGoal();
 
     mCoach.setFuelInterval(readNumberSetting("fuelInterval", CoachManager.FUEL_AUTO));
     mAlertsSetting = readNumberSetting("coachAlerts", ALERTS_WARNINGS);
@@ -285,6 +305,56 @@ class RaceEstimatorView extends WatchUi.DataField {
         Application.Properties.setValue("resetHighScores", false);
       } catch (ex) {}
     }
+  }
+
+  // No goal set: race your high score for the target. Once the target is
+  // finished its best may be this run, so use the best from before it.
+  private function refreshGoal() as Void {
+    mGoalMs = mUserGoalMs;
+    mGoalFromBest = false;
+    if (mGoalMs <= 0) {
+      var best = mHighScores.getBest(mTargetCm);
+      var finish = mMilestones.getMilestoneFinishTime(mTargetIdx);
+      if (finish != null && best != null && best == finish) {
+        best = mPrevBestMs;
+      }
+      if (best != null && best > 0) {
+        mGoalMs = best;
+        mGoalFromBest = true;
+      }
+    }
+    mCoach.setGoal(mGoalMs, mGoalFromBest);
+  }
+
+  // Current pace as the watch reports it (lap-sync scale applied), in the
+  // device's pace units: "5:12 /KM"
+  private function updatePace(speed as Lang.Float?) as Void {
+    var unit = mPaceStatute ? " /MI" : " /KM";
+    if (speed == null || speed < MIN_PACE_SPEED) {
+      mPaceText = "--:--" + unit;
+      return;
+    }
+    var metres = mPaceStatute ? 1609.344d : 1000.0d;
+    var sec = (metres / (speed * mCalibrator.getScale())).toNumber();
+    mPaceText = sec / 60 + ":" + (sec % 60).format("%02d") + unit;
+  }
+
+  function getPaceText() as Lang.String {
+    return mPaceText;
+  }
+
+  function isGoalFromBest() as Lang.Boolean {
+    return mGoalFromBest;
+  }
+
+  function getGoalMs() as Lang.Number {
+    return mGoalMs;
+  }
+
+  // Tests: seed the high-score table (storage is off in debug builds)
+  function recordHighScoreForTest(distanceCm as Lang.Number, timeMs as Lang.Number) as Void {
+    mHighScores.record(distanceCm, timeMs);
+    refreshGoal();
   }
 
   private function readFloatSetting(
@@ -421,6 +491,7 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
     mTimerMs = timerTimeMs;
     mStarted = true;
+    updatePace(info.currentSpeed);
     mRawDistanceM = rawDistance.toDouble();
     // Lap-sync correction (1.0 until a lap is pressed at a course marker)
     var elapsedDistance = mCalibrator.apply(mRawDistanceM).toFloat();
@@ -438,10 +509,17 @@ class RaceEstimatorView extends WatchUi.DataField {
       info.timerState == Activity.TIMER_STATE_STOPPED
     ) {
       mShowResults = mMilestones.getMilestoneFinishTime(mTargetIdx) != null;
+      if (mShowResults && mResultFrames.size() == 0) {
+        buildResultFrames();
+      }
       setStatus("PAUSED");
       return;
     }
     mShowResults = false;
+    if (mResultFrames.size() > 0) {
+      mResultFrames = [] as Lang.Array<Lang.String>;
+      mResultColors = [] as Lang.Array<Lang.Number>;
+    }
 
     if (!mRestoreChecked) {
       mRestoreChecked = true;
@@ -683,9 +761,7 @@ class RaceEstimatorView extends WatchUi.DataField {
 
     if (mMilestones.isCelebrating()) {
       setStatus(
-        mMilestones.getCelebrationMilestoneIdx() == mTargetIdx
-          ? "TARGET CLEAR!"
-          : "STAGE CLEAR!"
+        celebrationStatus(mMilestones.getCelebrationMilestoneIdx())
       );
       return;
     }
@@ -759,7 +835,13 @@ class RaceEstimatorView extends WatchUi.DataField {
       mCelebFrames.add(""); // blink
       mCelebColors.add(0);
     }
-    if (newHigh) {
+    var hiShown = false;
+    if (idx == mTargetIdx) {
+      hiShown = addGoalFrames(mCelebFrames, mCelebColors, actual);
+    } else if (idx > mTargetIdx) {
+      addBonusFrames(idx);
+    }
+    if (newHigh && !hiShown) {
       mCelebFrames.add("NEW HIGH SCORE!");
       mCelebColors.add(3);
     }
@@ -775,6 +857,123 @@ class RaceEstimatorView extends WatchUi.DataField {
       mCelebFrames.add(combo);
       mCelebColors.add(3);
     }
+  }
+
+  // Goal verdict for a finish time. Beating the goal gets the full
+  // treatment: GOAL CLEAR!, the margin and a line of praise (bigger praise
+  // for a bigger margin). Just missing it gets encouragement. When the goal
+  // is the high score it reads "UNDER BEST" and the title is NEW HIGH SCORE!
+  // @return true if that title was added (callers then skip their own)
+  private function addGoalFrames(
+    frames as Lang.Array<Lang.String>,
+    colors as Lang.Array<Lang.Number>,
+    time as Lang.Number
+  ) as Lang.Boolean {
+    if (mGoalMs <= 0) {
+      return false;
+    }
+    var d = time - mGoalMs;
+    var margin = formatDuration(d < 0 ? -d : d);
+    var word = mGoalFromBest ? " BEST" : " GOAL";
+    // A tie is not a new high score
+    if (mGoalFromBest ? d < 0 : d <= 0) {
+      frames.add(mGoalFromBest ? "NEW HIGH SCORE!" : "GOAL CLEAR!");
+      colors.add(3);
+      frames.add(margin + " UNDER" + word);
+      colors.add(1);
+      var legend = -d >= mGoalMs * GOAL_LEGEND_FRACTION;
+      var praise = legend
+        ? ["LEGENDARY RUN!", "UNSTOPPABLE!", "PERFECT GAME!"]
+        : ["YOU CRUSHED IT!", "WHAT A RUN!", "CHAMPION!"];
+      var pick = (time / 1000) % 3;
+      frames.add(praise[pick]);
+      colors.add(3);
+      frames.add(praise[(pick + 1) % 3]);
+      colors.add(1);
+      return mGoalFromBest;
+    } else {
+      frames.add(margin + " OVER" + word);
+      colors.add(2);
+      if (d <= mGoalMs * GOAL_LEGEND_FRACTION) {
+        frames.add("SO CLOSE!");
+        colors.add(3);
+      }
+    }
+    return false;
+  }
+
+  private function celebrationStatus(idx as Lang.Number?) as Lang.String {
+    if (idx == null || idx < mTargetIdx) {
+      return "STAGE CLEAR!";
+    }
+    return idx == mTargetIdx ? "TARGET CLEAR!" : "BONUS CLEAR!";
+  }
+
+  // A milestone past the target: you set out for a 10K and kept going.
+  // Every one gets extra praise, and it builds with each bonus stage.
+  private function addBonusFrames(idx as Lang.Number) as Void {
+    var bonus = idx - mTargetIdx;
+    var unlocked = mMilestones.getMilestoneLabel(idx) + " UNLOCKED!";
+    mCelebFrames.add(pixelColumns(unlocked) <= CoachManager.MAX_COLUMNS ? unlocked : "UNLOCKED!");
+    mCelebColors.add(3);
+    var praise = [
+      "ABOVE AND BEYOND!",
+      "OVERACHIEVER!",
+      "EXTRA CREDIT!",
+      "LIMIT BREAK!",
+      "UNSTOPPABLE!",
+    ];
+    mCelebFrames.add(praise[(bonus - 1) % praise.size()]);
+    mCelebColors.add(1);
+    mCelebFrames.add("BONUS X" + bonus);
+    mCelebColors.add(3);
+  }
+
+  // Milestones finished past the target (bonus stages)
+  private function bonusCount() as Lang.Number {
+    var n = 0;
+    for (var i = mTargetIdx + 1; i < mMilestones.getMilestoneCount(); i++) {
+      if (mMilestones.getMilestoneFinishTime(i) != null) {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  // Results verdict frames: goal (see addGoalFrames), high score, or
+  // GAME OVER when there is neither
+  private function buildResultFrames() as Void {
+    mResultFrames = [] as Lang.Array<Lang.String>;
+    mResultColors = [] as Lang.Array<Lang.Number>;
+    var time = mMilestones.getMilestoneFinishTime(mTargetIdx);
+    var hiShown = false;
+    if (time != null) {
+      hiShown = addGoalFrames(mResultFrames, mResultColors, time);
+    }
+    if (mTargetNewHigh && !hiShown) {
+      mResultFrames.add("NEW HIGH SCORE!");
+      mResultColors.add(3);
+    }
+    var bonus = bonusCount();
+    if (bonus > 0) {
+      mResultFrames.add("BONUS STAGES X" + bonus);
+      mResultColors.add(3);
+      mResultFrames.add("ABOVE AND BEYOND!");
+      mResultColors.add(1);
+    }
+    var cleared = mGoalMs > 0 && time != null && time <= mGoalMs;
+    if (!cleared && !mTargetNewHigh && bonus == 0) {
+      mResultFrames.add("GAME OVER");
+      mResultColors.add(2);
+    }
+  }
+
+  function getCelebFrames() as Lang.Array<Lang.String> {
+    return mCelebFrames;
+  }
+
+  function getResultFrames() as Lang.Array<Lang.String> {
+    return mResultFrames;
   }
 
   private function setStatus(text as Lang.String) as Void {
@@ -824,6 +1023,7 @@ class RaceEstimatorView extends WatchUi.DataField {
       mSubY = (h * FS_SUB_Y).toNumber();
       mRow1Y = (h * FS_ROW1_Y).toNumber();
       mRow2Y = (h * FS_ROW2_Y).toNumber();
+      mPaceY = (h * FS_PACE_Y).toNumber();
       heroMaxW = (w * FS_HERO_MAX_W).toNumber();
       heroMaxH = (h * FS_HERO_MAX_H).toNumber();
       titleMaxH = (h * FS_TITLE_MAX_H).toNumber();
@@ -880,6 +1080,15 @@ class RaceEstimatorView extends WatchUi.DataField {
       subScale = MIN_FONT_SCALE;
     }
     mSubFont = loadPixelFont(subScale);
+
+    // Pace: as big as the circle's chord at that height allows
+    if (mIsFullScreen) {
+      var r = mArc.getInnerRadius() - mUnit;
+      var dy = mPaceY + (h * FS_PACE_MAX_H).toNumber() / 2 - h / 2;
+      var sq = r * r - dy * dy;
+      var paceMaxW = sq > 0 ? Math.sqrt(sq).toNumber() * 2 : w / 2;
+      mPaceFont = loadPixelFont(fitScale(PACE_SAMPLE, paceMaxW, (h * FS_PACE_MAX_H).toNumber()));
+    }
   }
 
   // Largest integer scale at which `sample` fits the box
@@ -969,11 +1178,10 @@ class RaceEstimatorView extends WatchUi.DataField {
     }
   }
 
-  //   [segmented gauge]      10K               <- title, check when reached
+  //   [segmented gauge]      10K               <- next milestone, check when reached
   //                         48:12              <- projected / actual finish
   //                   2.31 KM IN 11:04         <- context or arcade status
-  //                  HALF ........ 1:46:20     <- hi-score table
-  //                  MARATHON .... 3:44:05
+  //                        5:12 /KM            <- current pace
   private function drawFullScreen(dc as Graphics.Dc, focus as Lang.Number) as Void {
     var celebrating = mMilestones.isCelebrating();
     drawLevelMap(dc, celebrating);
@@ -982,11 +1190,14 @@ class RaceEstimatorView extends WatchUi.DataField {
     drawHero(dc, focus);
     drawSubline(dc, celebrating);
 
-    selectTableRows(focus);
-    var left = mCenterX - mTableHalfWidth + mOx;
-    var right = mCenterX + mTableHalfWidth + mOx;
-    drawTableRow(dc, mTableIdx[0], mRow1Y + mOy, left, right);
-    drawTableRow(dc, mTableIdx[1], mRow2Y + mOy, left, right);
+    dc.setColor(mColorScheme.getValueColor(), Graphics.COLOR_TRANSPARENT);
+    dc.drawText(
+      mCenterX + mOx,
+      mPaceY + mOy,
+      mPaceFont,
+      mPaceText,
+      Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+    );
   }
 
   // Arc = level map of the target race: travelled blocks in phase colours,
@@ -1144,21 +1355,14 @@ class RaceEstimatorView extends WatchUi.DataField {
     drawTitle(dc, mTargetIdx);
     drawHero(dc, mTargetIdx);
 
-    var time = mMilestones.getMilestoneFinishTime(mTargetIdx);
+    // Verdict frames cycle 1 per second (see buildResultFrames)
     var verdict = "GAME OVER";
     var verdictColor = mColorScheme.getStatusColor();
-    if (mTargetNewHigh) {
-      verdict = "NEW HIGH SCORE!";
-      verdictColor = mColorScheme.getTitleColor();
-    } else if (mGoalMs > 0 && time != null && time <= mGoalMs) {
-      verdict = "GOAL CLEAR!";
-      verdictColor = mColorScheme.getProgressColor();
-    }
-    // Alternate with the goal margin every other second
-    if (mGoalMs > 0 && time != null && mPhase == 1) {
-      var d = time - mGoalMs;
-      verdict = formatDuration(d < 0 ? -d : d) + (d <= 0 ? " UNDER GOAL" : " OVER GOAL");
-      verdictColor = d <= 0 ? mColorScheme.getProgressColor() : mColorScheme.getStatusColor();
+    var n = mResultFrames.size();
+    if (n > 0) {
+      var frame = (System.getTimer() / 1000) % n;
+      verdict = mResultFrames[frame];
+      verdictColor = celebColor(mResultColors[frame]);
     }
     dc.setColor(verdictColor, Graphics.COLOR_TRANSPARENT);
     dc.drawText(
@@ -1265,41 +1469,6 @@ class RaceEstimatorView extends WatchUi.DataField {
     );
   }
 
-  // Two rows under the hero: the next two milestones; near the end, fall back
-  // to the most recent results so the table never goes blank
-  private function selectTableRows(focus as Lang.Number) as Void {
-    var count = mMilestones.getMilestoneCount();
-    if (focus + 2 < count) {
-      mTableIdx[0] = focus + 1;
-      mTableIdx[1] = focus + 2;
-    } else if (focus + 1 < count) {
-      mTableIdx[0] = focus - 1;
-      mTableIdx[1] = focus + 1;
-    } else {
-      mTableIdx[0] = focus - 2;
-      mTableIdx[1] = focus - 1;
-    }
-  }
-
-  // Milestone row of the hi-score table
-  private function drawTableRow(
-    dc as Graphics.Dc,
-    idx as Lang.Number,
-    y as Lang.Number,
-    left as Lang.Number,
-    right as Lang.Number
-  ) as Void {
-    drawRow(
-      dc,
-      mMilestones.getMilestoneLabel(idx),
-      mTimes.getTime(idx),
-      mMilestones.getMilestoneFinishTime(idx) != null,
-      y,
-      left,
-      right
-    );
-  }
-
   // Hi-score row: LABEL ....... TIME, dots one glyph-pixel in size
   private function drawRow(
     dc as Graphics.Dc,
@@ -1311,6 +1480,18 @@ class RaceEstimatorView extends WatchUi.DataField {
     right as Lang.Number
   ) as Void {
     var justify = Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER;
+    var s = mSmallScale;
+    // Never let label and time collide: at the smallest font a long label
+    // and an H:MM:SS time can be wider than the row, so widen it evenly
+    var need =
+      dc.getTextWidthInPixels(checked ? CHECK_GLYPH + " " + label : label, mSmallFont) +
+      2 * s +
+      dc.getTextWidthInPixels(time, mSmallFont);
+    if (need > right - left) {
+      var extra = need - (right - left) + 1;
+      left -= extra / 2;
+      right += extra - extra / 2;
+    }
     var x = left;
     if (checked) {
       dc.setColor(mColorScheme.getProgressColor(), Graphics.COLOR_TRANSPARENT);
@@ -1321,7 +1502,6 @@ class RaceEstimatorView extends WatchUi.DataField {
     dc.drawText(x, y, mSmallFont, label, justify);
 
     // Leader dots, aligned to a 2-glyph-pixel grid so both rows match
-    var s = mSmallScale;
     var dotsFrom = x + dc.getTextWidthInPixels(label, mSmallFont) + 2 * s;
     var dotsTo = right - dc.getTextWidthInPixels(time, mSmallFont) - 2 * s;
     var dotX = left + ((dotsFrom - left + 2 * s - 1) / (2 * s)) * (2 * s);
@@ -1391,6 +1571,10 @@ class RaceEstimatorView extends WatchUi.DataField {
     mTargetNewHigh = false;
     mPrevBestMs = null;
     mShowResults = false;
+    mResultFrames = [] as Lang.Array<Lang.String>;
+    mResultColors = [] as Lang.Array<Lang.Number>;
+    // New run: race the best as it stands now
+    refreshGoal();
     mNoticeText = "";
     mIndoorChecked = false;
     mStarted = false;
